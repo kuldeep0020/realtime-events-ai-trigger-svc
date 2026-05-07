@@ -49,6 +49,17 @@ type Snapshot struct {
 	// frontend's TriggerCard "Why" section) can display the idle figure without
 	// a separate computation.
 	IdleSeconds int `json:"idle_seconds"`
+
+	// LastListingProps is a deep-copy of the properties map from the most
+	// recent "Listing Viewed" track event. Nil/empty until such an event
+	// has been applied to the window.
+	LastListingProps map[string]any `json:"last_listing_props,omitempty"`
+	// LastFilterProps is a deep-copy of the properties map from the most
+	// recent "Filter Applied" track event.
+	LastFilterProps map[string]any `json:"last_filter_props,omitempty"`
+	// DominantSuburb is the most-frequent value of properties.suburb across
+	// all track events observed in this window.
+	DominantSuburb string `json:"dominant_suburb,omitempty"`
 }
 
 // IdleFor returns how long the window has been idle relative to now. Zero or

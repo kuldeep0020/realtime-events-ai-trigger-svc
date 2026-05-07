@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -54,7 +55,28 @@ func (rt *runtime) fireMatch(ctx context.Context, m rules.Match, persona string)
 		return
 	}
 
-	payload := dispatch.NewLLMPayload(result.Template, result.Parsed, result.Raw)
+	// Template-fill: substitute {{section.path}} placeholders in the canned
+	// response's parsed map before dispatching (§3.3, §5.1).
+	now := time.Now().UTC()
+	windowMap := dispatch.BuildWindowMap(m.Snapshot, now)
+	selectedRealtor := dispatch.SelectRealtor(rt.realtors, m.Snapshot.DominantSuburb)
+	realtorMap := dispatch.RealtorToMap(selectedRealtor)
+	outcomeMap := dispatch.BuildOutcomeMap(result.Template, windowMap)
+	renderCtx := dispatch.RenderContext{
+		Trait:   tc.profileData,
+		Window:  windowMap,
+		Realtor: realtorMap,
+		Outcome: outcomeMap,
+	}
+	renderedParsed, missingPaths := dispatch.Render(result.Parsed, renderCtx)
+	if len(missingPaths) > 0 {
+		rt.log.Warn("serve: template-fill had missing paths",
+			"template", result.Template,
+			"missing", missingPaths,
+		)
+	}
+
+	payload := dispatch.NewLLMPayload(result.Template, renderedParsed, result.Raw)
 	dispatchStatus, dispatchedURL, dispatchErr := rt.dispatcher.Dispatch(ctx,
 		m.Fire.Destination, payload, persona, m.Anonymous, m.RuleName,
 	)
@@ -63,7 +85,6 @@ func (rt *runtime) fireMatch(ctx context.Context, m rules.Match, persona string)
 			"destination", m.Fire.Destination)
 	}
 
-	now := time.Now().UTC()
 	ruleID := m.RuleID
 	row := db.TriggerRow{
 		RuleID:         &ruleID,
@@ -76,9 +97,11 @@ func (rt *runtime) fireMatch(ctx context.Context, m rules.Match, persona string)
 		EnrichedTraits: tc.traitsJSON,
 		KapaResult:     tc.kapaJSON,
 		LLMRaw:         result.Raw,
-		// LLMParsed accepts JSONB bytes; result.Raw is the canonical JSON
-		// representation of result.Parsed (canned mode echoes raw_json).
-		LLMParsed:      []byte(result.Raw),
+		// LLMParsed holds the FILLED-IN canned JSON (post template substitution),
+		// so downstream consumers (replay, audit) see the realtor-ready text
+		// rather than raw {{...}} placeholders. Falls back to result.Raw on
+		// marshal failure so the trigger row never has a NULL llm_parsed.
+		LLMParsed:      mustMarshalRendered(renderedParsed, result.Raw, rt.log),
 		LLMSource:      result.Source,
 		Destination:    m.Fire.Destination,
 		DispatchStatus: dispatchStatus,
@@ -99,15 +122,18 @@ func (rt *runtime) fireMatch(ctx context.Context, m rules.Match, persona string)
 	rt.hub.Publish(sse.StreamTriggers, sse.Message{
 		Event: sse.StreamTriggers,
 		Data: map[string]any{
-			"id":              triggerID.String(),
-			"rule_name":       m.RuleName,
-			"persona":         persona,
-			"anonymous_id":    m.Anonymous,
-			"fired_at":        m.FiredAt.UTC().Format(time.RFC3339),
-			"window_snapshot": m.Snapshot,
-			"destination":     m.Fire.Destination,
-			"dispatch_status": dispatchStatus,
-			"llm_parsed":      result.Parsed,
+			"id":               triggerID.String(),
+			"rule_name":        m.RuleName,
+			"persona":          persona,
+			"anonymous_id":     m.Anonymous,
+			"fired_at":         m.FiredAt.UTC().Format(time.RFC3339),
+			"window_snapshot":  m.Snapshot,
+			"destination":      m.Fire.Destination,
+			"dispatch_status":  dispatchStatus,
+			"llm_parsed":       renderedParsed,
+			// Additive fields per §4.6 — consumed by OutcomeBanner.
+			"enriched_traits":  tc.profileData,
+			"assigned_realtor": realtorMap,
 		},
 	})
 	if scheme, _, _ := splitDest(m.Fire.Destination); scheme == "email" {
@@ -165,6 +191,10 @@ type triggerContext struct {
 	fullEventsJSON []byte
 	traitsJSON     []byte
 	kapaJSON       []byte
+	// profileData is the raw activation response map, kept alongside
+	// traitsJSON so the template-fill step can use it as RenderContext.Trait
+	// without re-unmarshalling from JSON.
+	profileData map[string]any
 }
 
 // buildTriggerContext fetches the full event log, profile traits, and
@@ -229,6 +259,7 @@ func (rt *runtime) buildTriggerContext(ctx context.Context, m rules.Match, perso
 		fullEventsJSON: fullEventsJSON,
 		traitsJSON:     traitsJSON,
 		kapaJSON:       kapaJSON,
+		profileData:    prof.Data,
 	}
 }
 
@@ -283,4 +314,23 @@ func stringFromMap(m map[string]any, key string) string {
 		return s
 	}
 	return ""
+}
+
+// mustMarshalRendered serializes the post-template-fill parsed map to JSON
+// bytes for persistence. On marshal failure (extremely unlikely for our
+// JSON-decoded inputs), it falls back to the raw canned string so the
+// trigger row's llm_parsed column is never NULL — the downstream replay
+// path tolerates raw placeholders better than a blank value.
+func mustMarshalRendered(rendered map[string]any, fallbackRaw string, log *slog.Logger) []byte {
+	if rendered == nil {
+		return []byte(fallbackRaw)
+	}
+	b, err := json.Marshal(rendered)
+	if err != nil {
+		if log != nil {
+			log.Warn("serve: marshal rendered llm_parsed failed — falling back to raw", "err", err)
+		}
+		return []byte(fallbackRaw)
+	}
+	return b
 }

@@ -565,6 +565,160 @@ func TestSnapshotMissingReturnsFalse(t *testing.T) {
 	}
 }
 
+// TestLastListingProps verifies that LastListingProps captures the latest
+// "Listing Viewed" event's full properties map and replaces on subsequent events.
+func TestLastListingProps(t *testing.T) {
+	s := New(0)
+	const anonID = "anon-listing-props"
+	t0 := time.Date(2026, 5, 8, 10, 0, 0, 0, time.UTC)
+
+	// First Listing Viewed
+	s.Update(makeEvent(t, "track", "Listing Viewed", anonID, "/listings",
+		map[string]any{"listing_id": "L101", "price": 1200000.0, "suburb": "suburb-1", "bedrooms": 3},
+		t0), time.Time{})
+
+	snap, _ := s.Snapshot(anonID)
+	if snap.LastListingProps["listing_id"] != "L101" {
+		t.Errorf("LastListingProps[listing_id] = %v, want L101", snap.LastListingProps["listing_id"])
+	}
+
+	// Second Listing Viewed should replace
+	s.Update(makeEvent(t, "track", "Listing Viewed", anonID, "/listings",
+		map[string]any{"listing_id": "L112", "price": 1350000.0, "suburb": "suburb-1", "bedrooms": 4},
+		t0.Add(5*time.Second)), time.Time{})
+
+	snap, _ = s.Snapshot(anonID)
+	if snap.LastListingProps["listing_id"] != "L112" {
+		t.Errorf("LastListingProps[listing_id] = %v, want L112 after second event", snap.LastListingProps["listing_id"])
+	}
+	// Original listing should no longer appear
+	if snap.LastListingProps["price"] != 1350000.0 {
+		t.Errorf("LastListingProps[price] = %v, want 1350000.0", snap.LastListingProps["price"])
+	}
+
+	// Non-Listing event should not affect LastListingProps
+	s.Update(makeEvent(t, "track", "Filter Applied", anonID, "/listings",
+		map[string]any{"beds_min": 3, "suburb": "suburb-1"},
+		t0.Add(8*time.Second)), time.Time{})
+
+	snap, _ = s.Snapshot(anonID)
+	if snap.LastListingProps["listing_id"] != "L112" {
+		t.Errorf("LastListingProps[listing_id] = %v; non-listing event must not overwrite", snap.LastListingProps["listing_id"])
+	}
+}
+
+// TestLastFilterProps verifies that LastFilterProps captures the latest
+// "Filter Applied" event's properties map.
+func TestLastFilterProps(t *testing.T) {
+	s := New(0)
+	const anonID = "anon-filter-props"
+	t0 := time.Date(2026, 5, 8, 10, 0, 0, 0, time.UTC)
+
+	s.Update(makeEvent(t, "track", "Filter Applied", anonID, "/listings",
+		map[string]any{"beds_min": 2, "price_min": 800000, "suburb": "suburb-2"},
+		t0), time.Time{})
+
+	snap, _ := s.Snapshot(anonID)
+	// Properties are JSON-roundtripped as float64 by makeEvent's json.Marshal.
+	if snap.LastFilterProps["beds_min"] != float64(2) {
+		t.Errorf("LastFilterProps[beds_min] = %v, want 2", snap.LastFilterProps["beds_min"])
+	}
+
+	// Replace with a second filter event
+	s.Update(makeEvent(t, "track", "Filter Applied", anonID, "/listings",
+		map[string]any{"beds_min": 3, "price_max": 1500000, "suburb": "suburb-1"},
+		t0.Add(5*time.Second)), time.Time{})
+
+	snap, _ = s.Snapshot(anonID)
+	if snap.LastFilterProps["beds_min"] != float64(3) {
+		t.Errorf("LastFilterProps[beds_min] = %v, want 3 after second event", snap.LastFilterProps["beds_min"])
+	}
+	if snap.LastFilterProps["price_max"] != float64(1500000) {
+		t.Errorf("LastFilterProps[price_max] = %v, want 1500000", snap.LastFilterProps["price_max"])
+	}
+}
+
+// TestDominantSuburb verifies mode-based suburb computation with tie-break
+// on recency (latest suburb wins ties).
+func TestDominantSuburb(t *testing.T) {
+	s := New(0)
+	const anonID = "anon-suburb"
+	t0 := time.Date(2026, 5, 8, 10, 0, 0, 0, time.UTC)
+
+	// Two events for suburb-1
+	s.Update(makeEvent(t, "track", "Listing Viewed", anonID, "/listings",
+		map[string]any{"listing_id": "L101", "suburb": "suburb-1", "price": 1000000.0},
+		t0), time.Time{})
+	s.Update(makeEvent(t, "track", "Listing Viewed", anonID, "/listings",
+		map[string]any{"listing_id": "L102", "suburb": "suburb-1", "price": 1100000.0},
+		t0.Add(2*time.Second)), time.Time{})
+
+	snap, _ := s.Snapshot(anonID)
+	if snap.DominantSuburb != "suburb-1" {
+		t.Errorf("DominantSuburb = %q, want suburb-1", snap.DominantSuburb)
+	}
+
+	// One event for suburb-2 — suburb-1 still dominates
+	s.Update(makeEvent(t, "track", "Listing Viewed", anonID, "/listings",
+		map[string]any{"listing_id": "L201", "suburb": "suburb-2", "price": 1200000.0},
+		t0.Add(4*time.Second)), time.Time{})
+
+	snap, _ = s.Snapshot(anonID)
+	if snap.DominantSuburb != "suburb-1" {
+		t.Errorf("DominantSuburb = %q, want suburb-1 (count 2 vs 1)", snap.DominantSuburb)
+	}
+
+	// Tie: another suburb-2 event brings counts equal (2:2).
+	// Tie-break = recency → suburb-2 should win.
+	s.Update(makeEvent(t, "track", "Listing Viewed", anonID, "/listings",
+		map[string]any{"listing_id": "L202", "suburb": "suburb-2", "price": 1300000.0},
+		t0.Add(6*time.Second)), time.Time{})
+
+	snap, _ = s.Snapshot(anonID)
+	if snap.DominantSuburb != "suburb-2" {
+		t.Errorf("DominantSuburb = %q, want suburb-2 (tie-break recency)", snap.DominantSuburb)
+	}
+
+	// Events without suburb must not reset DominantSuburb
+	s.Update(makeEvent(t, "track", "Page Viewed", anonID, "/",
+		map[string]any{"price": 500.0},
+		t0.Add(8*time.Second)), time.Time{})
+	snap, _ = s.Snapshot(anonID)
+	if snap.DominantSuburb != "suburb-2" {
+		t.Errorf("DominantSuburb changed to %q after no-suburb event; want suburb-2", snap.DominantSuburb)
+	}
+}
+
+// TestSnapshot_NewFieldsDeepCopy verifies that LastListingProps and
+// LastFilterProps in the Snapshot are independent deep-copies — mutating
+// a snapshot's maps does not affect the live window state.
+func TestSnapshot_NewFieldsDeepCopy(t *testing.T) {
+	s := New(0)
+	const anonID = "anon-new-deepcopy"
+	t0 := time.Date(2026, 5, 8, 10, 0, 0, 0, time.UTC)
+
+	s.Update(makeEvent(t, "track", "Listing Viewed", anonID, "/listings",
+		map[string]any{"listing_id": "L999", "price": 2000000.0, "suburb": "suburb-1"},
+		t0), time.Time{})
+	s.Update(makeEvent(t, "track", "Filter Applied", anonID, "/listings",
+		map[string]any{"beds_min": 4, "suburb": "suburb-1"},
+		t0.Add(2*time.Second)), time.Time{})
+
+	snap1, _ := s.Snapshot(anonID)
+	// Mutate snapshot copies — JSON round-trip stores ints as float64.
+	snap1.LastListingProps["listing_id"] = "TAMPERED"
+	snap1.LastFilterProps["beds_min"] = 999
+
+	snap2, _ := s.Snapshot(anonID)
+	if snap2.LastListingProps["listing_id"] != "L999" {
+		t.Errorf("LastListingProps[listing_id] tampered: got %v, want L999", snap2.LastListingProps["listing_id"])
+	}
+	// beds_min was encoded as float64(4) via JSON round-trip in makeEvent.
+	if snap2.LastFilterProps["beds_min"] != float64(4) {
+		t.Errorf("LastFilterProps[beds_min] tampered: got %v, want 4", snap2.LastFilterProps["beds_min"])
+	}
+}
+
 func TestHasErrorSuffix(t *testing.T) {
 	cases := []struct {
 		in   string

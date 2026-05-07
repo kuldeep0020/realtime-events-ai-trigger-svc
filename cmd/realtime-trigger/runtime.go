@@ -69,6 +69,12 @@ type runtime struct {
 	kapaClient       kapa.Client
 	activationClient activation.Client
 
+	// realtors holds the persona-level realtor roster loaded from the realestate
+	// persona config. Used by fireMatch to select the matching realtor by
+	// dominant suburb when building the template RenderContext. Populated
+	// externally (e.g. from seed / admin-seed) via setRealtors.
+	realtors []rules.RealtorEntry
+
 	// demo-fire & admin-seed handlers wired into the API
 	fireScriptHandler api.FireScriptFunc
 	adminSeedFn       func(ctx context.Context, fs api.SeedFS) error
@@ -183,6 +189,15 @@ func buildRuntime(ctx context.Context, cfg runtimeConfig, pool *pgxpool.Pool, lo
 	}
 	engine.RunReloader(ctx, 30*time.Second)
 
+	// Load the realestate persona realtor roster for dispatcher template-fill.
+	// Failure is non-fatal: SelectRealtor handles a nil roster.
+	if realtors, err := loadRealtorsFromPG(ctx, rt); err != nil {
+		log.Warn("serve: realtor roster load failed — Slack messages will use empty realtor info", "err", err)
+	} else {
+		rt.realtors = realtors
+		log.Info("serve: loaded realtor roster", "count", len(realtors))
+	}
+
 	rt.fireScriptHandler = rt.makeFireScript()
 	rt.adminSeedFn = rt.makeAdminSeed()
 	return rt, nil
@@ -191,20 +206,45 @@ func buildRuntime(ctx context.Context, cfg runtimeConfig, pool *pgxpool.Pool, lo
 // makeFireScript wraps the appropriate demofire backend into the
 // api.FireScriptFunc signature expected by the API server.
 //
+// count specifies how many concurrent sessions to fire (1-3); speed is the
+// playback multiplier (0.5, 1.0, 2.0).
+//
 // When cfg.DemoFireTarget == "pulsar" (the default), events are published
 // directly to the local Pulsar broker so that the consumer running in the
 // same process receives them. When cfg.DemoFireTarget == "http", the legacy
 // HTTP path (POST to the ingestion-svc URL) is used instead.
 func (rt *runtime) makeFireScript() api.FireScriptFunc {
-	return func(ctx context.Context, persona string) (int, error) {
-		script := demofire.ScriptForPersona(persona)
-		if script == nil {
-			return 0, fmt.Errorf("unknown persona %q", persona)
+	return func(ctx context.Context, persona string, count int, speed float64) (int, error) {
+		if count <= 0 {
+			count = 1
 		}
 
 		wk := demofire.PersonaWriteKey(persona)
 		if wk == "" && len(rt.cfg.AllowedWriteKeys) > 0 {
 			wk = rt.cfg.AllowedWriteKeys[0]
+		}
+		if wk == "" {
+			return 0, fmt.Errorf("fire-script: no write key available for persona %q", persona)
+		}
+
+		// Build N named scripts, clipped to the length of the profile spec
+		// table for the persona.
+		maxIdx := profileSpecCount(persona)
+		if count > maxIdx {
+			count = maxIdx
+		}
+		scripts := make([]demofire.NamedScript, 0, count)
+		for i := 0; i < count; i++ {
+			script := demofire.ScriptForPersonaIndex(persona, i)
+			if script == nil {
+				return 0, fmt.Errorf("fire-script: unknown persona %q", persona)
+			}
+			anonID := scriptAnonID(persona, i)
+			scripts = append(scripts, demofire.NamedScript{
+				Persona: persona,
+				Script:  script,
+				AnonID:  anonID,
+			})
 		}
 
 		switch rt.cfg.DemoFireTarget {
@@ -212,17 +252,12 @@ func (rt *runtime) makeFireScript() api.FireScriptFunc {
 			if rt.cfg.IngestionURL == "" {
 				return 0, fmt.Errorf("fire-script: INGESTION_URL is required when DEMO_FIRE_TARGET=http")
 			}
-			if wk == "" {
-				return 0, fmt.Errorf("fire-script: no write key available for persona %q", persona)
-			}
 			firer := demofire.NewFirer(rt.cfg.IngestionURL, wk)
 			firer.Logger = rt.log
-			return firer.Fire(ctx, script)
+			firer.Speed = speed
+			return firer.RunConcurrent(ctx, scripts, speed)
 
 		default: // "pulsar"
-			if wk == "" {
-				return 0, fmt.Errorf("fire-script: no write key available for persona %q", persona)
-			}
 			pf := demofire.NewPulsarFirer(demofire.PulsarFirerConfig{
 				URL:                 rt.cfg.PulsarURL,
 				Topic:               rt.cfg.PulsarTopic,
@@ -233,9 +268,32 @@ func (rt *runtime) makeFireScript() api.FireScriptFunc {
 				SourceID:            "",
 			})
 			pf.Logger = rt.log
-			return pf.Fire(ctx, script)
+			return pf.RunConcurrent(ctx, scripts, speed)
 		}
 	}
+}
+
+// profileSpecCount returns the number of profile specs for a persona —
+// used to clip the requested count so we don't repeat the same profile.
+func profileSpecCount(persona string) int {
+	switch persona {
+	case "realestate":
+		return 8
+	case "rs-self":
+		return 3
+	default:
+		return 1
+	}
+}
+
+// scriptAnonID extracts the anonymousId for the idx-th profile of the
+// given persona so the serve layer can attach it to the NamedScript.
+func scriptAnonID(persona string, idx int) string {
+	script := demofire.ScriptForPersonaIndex(persona, idx)
+	if len(script) == 0 {
+		return ""
+	}
+	return script[0].Event.AnonymousID
 }
 
 // makeAdminSeed returns a function that re-runs the seed loader with the

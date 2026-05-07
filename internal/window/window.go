@@ -59,6 +59,21 @@ type UserWindow struct {
 	LastSeen       time.Time
 	Traits         map[string]any
 	SessionID      int64
+
+	// LastListingProps holds the full properties map of the most recent
+	// "Listing Viewed" track event. Populated incrementally; nil until the
+	// first such event is applied. Used by the dispatcher as render context.
+	LastListingProps map[string]any
+	// LastFilterProps holds the full properties map of the most recent
+	// "Filter Applied" track event. Populated incrementally.
+	LastFilterProps map[string]any
+	// DominantSuburb is the most-frequent value of properties.suburb across
+	// all track events. Tie-break: most-recently-seen suburb wins.
+	DominantSuburb string
+	// suburbCounts is the unexported per-suburb frequency counter that
+	// drives DominantSuburb. Initialised to non-nil by newUserWindow.
+	suburbCounts map[string]int
+
 	// triggeredRules mirrors DB cooldown state for fast local checks. The
 	// rules engine is the source of truth; this is a hint for optimization.
 	triggeredRules map[string]time.Time
@@ -75,15 +90,18 @@ type UserWindow struct {
 // event has been applied (an unlikely but possible race).
 func newUserWindow(anonID string, now time.Time) *UserWindow {
 	return &UserWindow{
-		AnonymousID:    anonID,
-		EventTypeCount: map[string]int{},
-		EventNameCount: map[string]int{},
-		DistinctPaths:  map[string]int{},
-		PropertyMaxNum: map[string]float64{},
-		PropertyLast:   map[string]any{},
-		Traits:         map[string]any{},
-		triggeredRules: map[string]time.Time{},
-		lastTouched:    now,
+		AnonymousID:      anonID,
+		EventTypeCount:   map[string]int{},
+		EventNameCount:   map[string]int{},
+		DistinctPaths:    map[string]int{},
+		PropertyMaxNum:   map[string]float64{},
+		PropertyLast:     map[string]any{},
+		Traits:           map[string]any{},
+		LastListingProps: map[string]any{},
+		LastFilterProps:  map[string]any{},
+		suburbCounts:     map[string]int{},
+		triggeredRules:   map[string]time.Time{},
+		lastTouched:      now,
 	}
 }
 
@@ -146,6 +164,26 @@ func (w *UserWindow) apply(e *event.Event, receivedAt time.Time) {
 				}
 			}
 		}
+
+		// Dominant suburb — track frequency across all track events with
+		// properties.suburb set. Tie-break on recency: a new event with the
+		// same max count replaces the previous dominant.
+		if suburb, ok := props["suburb"].(string); ok && suburb != "" {
+			w.suburbCounts[suburb]++
+			if w.suburbCounts[suburb] >= w.suburbCounts[w.DominantSuburb] {
+				w.DominantSuburb = suburb
+			}
+		}
+
+		// LastListingProps and LastFilterProps — capture the full property map
+		// for the most recent event of each category. Deep-copy so window state
+		// is not shared with the caller's event payload.
+		if e.Event == "Listing Viewed" {
+			w.LastListingProps = copyStringAnyMap(props)
+		}
+		if e.Event == "Filter Applied" {
+			w.LastFilterProps = copyStringAnyMap(props)
+		}
 	}
 
 	// Traits — flatten identify-time and context traits into a single map.
@@ -184,22 +222,25 @@ func (w *UserWindow) apply(e *event.Event, receivedAt time.Time) {
 // the shard read lock.
 func (w *UserWindow) snapshot() Snapshot {
 	return Snapshot{
-		AnonymousID:    w.AnonymousID,
-		UserID:         w.UserID,
-		EventCount:     w.EventCount,
-		EventTypeCount: copyStringIntMap(w.EventTypeCount),
-		EventNameCount: copyStringIntMap(w.EventNameCount),
-		DistinctPaths:  copyStringIntMap(w.DistinctPaths),
-		PathLatest:     w.PathLatest,
-		PropertyMaxNum: copyStringFloat64Map(w.PropertyMaxNum),
-		PropertyLast:   copyStringAnyMap(w.PropertyLast),
-		HasErrorEvent:  w.HasErrorEvent,
-		LastErrorEvent: copyEventRef(w.LastErrorEvent),
-		FirstSeen:      w.FirstSeen,
-		LastSeen:       w.LastSeen,
-		Traits:         copyStringAnyMap(w.Traits),
-		SessionID:      w.SessionID,
-		TriggeredRules: copyStringTimeMap(w.triggeredRules),
+		AnonymousID:      w.AnonymousID,
+		UserID:           w.UserID,
+		EventCount:       w.EventCount,
+		EventTypeCount:   copyStringIntMap(w.EventTypeCount),
+		EventNameCount:   copyStringIntMap(w.EventNameCount),
+		DistinctPaths:    copyStringIntMap(w.DistinctPaths),
+		PathLatest:       w.PathLatest,
+		PropertyMaxNum:   copyStringFloat64Map(w.PropertyMaxNum),
+		PropertyLast:     copyStringAnyMap(w.PropertyLast),
+		HasErrorEvent:    w.HasErrorEvent,
+		LastErrorEvent:   copyEventRef(w.LastErrorEvent),
+		FirstSeen:        w.FirstSeen,
+		LastSeen:         w.LastSeen,
+		Traits:           copyStringAnyMap(w.Traits),
+		SessionID:        w.SessionID,
+		TriggeredRules:   copyStringTimeMap(w.triggeredRules),
+		LastListingProps: copyStringAnyMap(w.LastListingProps),
+		LastFilterProps:  copyStringAnyMap(w.LastFilterProps),
+		DominantSuburb:   w.DominantSuburb,
 	}
 }
 
