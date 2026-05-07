@@ -1,7 +1,7 @@
 # Realtime AI Trigger Service — Hackathon Handoff Snapshot
 
-**Snapshot taken**: 2026-05-07 ~18:20 IST
-**Status**: backend pipeline fully functional end-to-end (Pulsar → consumer → window → rules → LLM canned → Slack/email). Frontend dashboard has a known SSE-rendering gap (visual only; doesn't block the demo).
+**Snapshot taken**: 2026-05-07 ~19:40 IST (rev 2)
+**Status**: backend pipeline AND dashboard fully functional end-to-end. Both personas verified via Playwright with zero console errors. Issue D (the "EventCard React render" bug from rev 1) was misdiagnosed — it was actually a backend-frontend SSE wire-shape mismatch on all 4 streams. Fixed in commit `3ef416b`.
 
 This document is the canonical state-of-the-world after the live click-through smoke. It exists so the conversation can be `/compact`-ed without losing context. After compact, anyone (Claude or human) can read this file plus `PITCH.md` and resume.
 
@@ -97,15 +97,36 @@ Top-3 fixed in commit `7a9cebe`:
 **From Reviewer C (.gitignore fix):**
 - C-M — Engineer A's modified files were bundled into Engineer C's git add (commit hygiene). Decision: accepted bundling for hackathon time pressure. Single commit covers all three fixes.
 
-### Demo-relevant frontend gap (not yet fixed)
+### Issue D — RESOLVED in commit `3ef416b`
 
-**Issue D — Dashboard 3-column SSE rendering blocked by React setState-during-render in `EventCard`.**
-- The backend now emits the correct `event: events` wire format (verified via curl: 9 records with the new name flowed during the smoke).
-- The frontend listener (`frontend/lib/sse.ts:112-131`) registers `addEventListener("events", ...)` — should fire.
-- But the browser console shows 6 `Cannot update a component while rendering a different component` warnings stemming from `EventCard` (Framer Motion + AnimatePresence interaction) and the columns stay at "Waiting for events…" / "0".
-- This is a pre-existing frontend bug (probably from WP-H), unrelated to today's SSE fix — but it's the reason the dashboard's visual flair doesn't work.
-- **Workaround for the demo**: project the Slack channel directly. The audience sees the Slack message land within ~2s of clicking Fire — that's the wow moment. Dashboard remains a slide-only architectural diagram.
-- **Real fix (post-demo)**: refactor `EventCard` so the AnimatePresence onExitComplete handler doesn't call setState during render. Engineer + reviewer pair when time permits.
+**Original diagnosis (rev 1) was wrong.** The "Cannot update a component while rendering a different component" warning was a downstream symptom, not the cause. The real bug was a 4-stream backend-frontend wire-shape mismatch:
+
+| Stream | Backend was emitting | Frontend expected (`frontend/types/api.ts`) | Failure mode |
+|---|---|---|---|
+| `events` | `{anonymous_id, event_type, event_name, pulsar_msg_id, received_at}` | `SSEEventPayload`: camelCase `{anonymousId, type, event, messageId, originalTimestamp, properties, ...}` | `event.payload.anonymousId.slice(-6)` → TypeError → React warning + Column 1 blank |
+| `windows` | `{AnonymousID, EventCount, ...}` (PascalCase Go field names — Snapshot had no json tags) | `SSEWindowPayload`: snake_case `{anonymous_id, event_count, idle_seconds, ...}` | `if (payload.anonymous_id == null) return` → silent drop → Column 2 blank |
+| `triggers` | missing `window_snapshot` field | `SSETriggerPayload` requires `window_snapshot` | TriggerCard reads `snapshot.event_count` → TypeError → Column 3 crashes when trigger fires |
+| `mock_emails` | `{trigger_id, persona, subject, body_md}` (no id, wrong key body_md vs body_markdown) | `MockEmailPayload`: `{id, to_email, body_markdown, links, created_at}` | `if (!payload.id) return` → silent drop → Email tab empty |
+
+**Fix scope** (commit 3ef416b, reviewed via Claude Opus subagent):
+- `cmd/realtime-trigger/runtime_pipeline.go` — replaced `eventSummary` `map[string]any` with typed `sseEventDTO` carrying camelCase json tags. Used `sse.EventWindowPruned` constant instead of bare literal.
+- `cmd/realtime-trigger/runtime_dispatch.go` — added `window_snapshot` + RFC3339 `fired_at` to trigger SSE; replaced mock_emails SSE body with full MockEmailPayload shape (id from dispatcher's `dispatchedURL` parsed via `strings.TrimPrefix("/api/mock-emails/")`); skip publish entirely on dispatch failure or empty emailID.
+- `internal/window/snapshot.go` — added explicit snake_case json tags on every field; new `IdleSeconds int \`json:"idle_seconds"\`` field.
+- `internal/window/store.go` — both `Snapshot()` AND `ScanIdle` now populate `snap.IdleSeconds = int(snap.IdleFor(now).Seconds())`. The latter was a reviewer-found follow-up bug — without it, the trigger that fires *because* of idle_seconds was reporting "Idle: 0s" on the dashboard.
+- `internal/sse/hub.go` — added `EventWindowPruned = "window_pruned"` constant.
+- `internal/api/api_test.go` — 4 new shape-assertion regression tests, one per stream.
+- `internal/window/window_test.go` — regression test for ScanIdle idle_seconds.
+
+**Verification (Playwright + Chrome, post-restart of frontend with cleaned `.next`)**:
+- Real-estate fire: Live Events column streams 8 events (identify → page → 3 Listing Viewed → Filter Applied → 2 page); Active Sessions card shows `…re-001` with 7 events / 2 pages / event-name pills "Listing Viewed (3)" / "Filter Applied (1)"; Triggers Fired shows `realtor_session_abandoned` for realestate persona with full canned LLM card (headline, urgency=high, 3 talking points, CTA, "Priya N." badge). Slack message confirmed delivered.
+- RS-self fire: 5 events with red "error" badge on the session card from `Destination Setup Error`; 2 triggers fired (`onboarding_errored` + `onboarding_stuck`); clicking "View email" inside the trigger card opens the email modal with full markdown body, From/To/Date headers, and 3 clickable doc links.
+- 0 console errors throughout.
+
+### Pre-existing frontend gaps (NOT demo-blocking; backlog)
+
+- **Tab switch wipes state** — Radix Tabs unmounts panels when switching, so navigating Dashboard → Emails → Dashboard tears down both panels' SSE state (live events, sessions, triggers all reset). Demo flow stays on Dashboard so this doesn't matter; would matter if the demo wanted to project both tabs.
+- **Emails tab has no initial fetch** — `EmailOutbox` only subscribes to SSE on mount; doesn't `GET /api/mock-emails`. So if user navigates to Emails AFTER triggers fire, the tab is empty even though DB has rows. Workaround for demo: use the in-trigger "View email" button on the rs-self trigger card (which embeds the email payload from the trigger SSE itself — works regardless of tab).
+- **Frontend `.next` build can go stale** — happened during this session after the backend rebuild. Symptom: 404s on `_next/static/chunks/app/*.js`. Fix: `pkill -f 'next dev'; rm -rf frontend/.next; pnpm dev`. Documented in restart recipe below.
 
 ---
 
@@ -189,8 +210,9 @@ PULSAR_JWT_TOKEN="$PULSAR_JWT_TOKEN" PULSAR_TLS_TRUST_CERTS="$PULSAR_TLS_TRUST_C
 PULSAR_TLS_VALIDATE_HOSTNAME="$PULSAR_TLS_VALIDATE_HOSTNAME" \
 nohup /tmp/realtime-trigger serve > /tmp/rt-svc-logs/serve.log 2>&1 &
 
-# 5. Frontend
+# 5. Frontend (always rm -rf .next when restarting backend — dev cache goes stale)
 cd frontend
+rm -rf .next
 NEXT_PUBLIC_API_BASE=http://localhost:8080 nohup pnpm dev --port 3001 > /tmp/rt-svc-logs/frontend.log 2>&1 &
 
 # 6. Smoke
