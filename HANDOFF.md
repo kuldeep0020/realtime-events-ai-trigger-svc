@@ -32,7 +32,7 @@ Screenshots in `docs/specs/screenshot-dashboard.png` and `docs/specs/screenshot-
 
 1. **Frontend env var required.** The frontend defaults to mock-mode unless `NEXT_PUBLIC_API_BASE` is set. Local dev: `frontend/.env.local` already contains `NEXT_PUBLIC_API_BASE=http://localhost:8080`. On the cluster, point it at the API ingress.
 2. **Reseed required.** The new canned templates + profiles require `./realtime-trigger seed --from hand --seed-dir ./seed --dsn $POSTGRES_DSN`. Run `/api/demo/reset` first or the seed errors on FK from `triggers` to `rules`.
-3. **Restart backend after reseed.** `runtime.realtors` is loaded once at boot from the active realestate config. Without a restart, `assigned_realtor` will be empty in dispatched messages.
+3. **Restart backend after reseed.** `runtime.realtors` is loaded once at boot from the active realestate config. Without a restart, `assigned_realtor` will be empty in dispatched messages. **Known limitation:** wizard-driven config reloads (§1.3) refresh rules but not the realtor roster; since §1.3 only changes `idle_seconds`/event filters (not the realtor list), this is safe for the demo. Fix post-pitch: extend `engine.RunReloader` to also re-invoke `loadRealtorsFromPG`.
 4. **The `count=3` configuration is the headline.** It always rotates through Sarah Chen (known) + Marcus Lee (known) + Anonymous slot (re-003), demonstrating both `realtor_known_high_intent` AND `realtor_anonymous_high_intent` rules in one click.
 5. **Speed 0.5x stretches the realestate script to ~64s.** Use it when leadership is reading along; 1x for narration; 2x for re-runs during Q&A.
 6. **Email tab still works for rs-self.** Distinct emails per rule (`rs_destination_error` vs `rs_onboarding_stuck`) preserved from rev 4.
@@ -42,6 +42,8 @@ Screenshots in `docs/specs/screenshot-dashboard.png` and `docs/specs/screenshot-
 - The dashboard's "Live Events" feed occasionally takes a few seconds to backfill on page load (uses `/api/recent-events` GET on mount; the existing TriggerStream/EventFeed pattern). Not a regression.
 - ROI tile counts only triggers received via SSE since page load — the page does NOT seed from `/api/recent-triggers` on mount (intentional simplicity v1). Reload after a fire and the tile is empty until next fire.
 - Auto-reset-on-Fire flow: clicking Fire while another Fire is in flight cancels the prior one and starts fresh. Status text briefly says "Resetting state…" — not a bug.
+- **EventSource count (Finding 1 push-back):** Three components (TriggerStream, OutcomeBanner, ROITile) each open a separate EventSource to `/api/streams/triggers`, plus `events`, `windows`, and `mock_emails` streams — 6 total per origin, sitting at the HTTP/1.1 browser cap. Spec §5.9 v1 explicitly accepts duplicate connections; Playwright E2E verified zero SSE drops; refactoring to a shared context hook carries regression risk we cannot afford before the morning demo. Acknowledged, deferred post-pitch.
+- **OutcomeBanner cast (NIT-2 push-back):** `payload as unknown as Record<string, unknown>` at OutcomeBanner.tsx:64-67 reads enriched_traits/assigned_realtor that are not on SSETriggerPayload. Typing properly requires a 15-min types/api.ts change with no functional benefit for the demo.
 
 ### Breakpoint for morning recovery
 
