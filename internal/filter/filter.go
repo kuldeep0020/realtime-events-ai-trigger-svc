@@ -79,6 +79,17 @@ func (f *Filter) Process(in consumer.ProcessedEvent) (out consumer.ProcessedEven
 	// 3. Field redaction.
 	if len(f.cfg.RedactPaths) > 0 && in.Event != nil {
 		ev := *in.Event // shallow copy of Event struct
+
+		// Deep-copy context.traits to avoid mutating the original map, which is
+		// a reference type shared by the shallow copy.
+		if ev.Context.Traits != nil {
+			copied := make(map[string]any, len(ev.Context.Traits))
+			for k, v := range ev.Context.Traits {
+				copied[k] = v
+			}
+			ev.Context.Traits = copied
+		}
+
 		redacted := f.redactEvent(&ev)
 		out = in
 		out.Event = &ev
