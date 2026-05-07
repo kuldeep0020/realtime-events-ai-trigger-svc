@@ -1,7 +1,27 @@
 # Realtime AI Trigger Service — Hackathon Handoff Snapshot
 
-**Snapshot taken**: 2026-05-07 ~19:40 IST (rev 2)
-**Status**: backend pipeline AND dashboard fully functional end-to-end. Both personas verified via Playwright with zero console errors. Issue D (the "EventCard React render" bug from rev 1) was misdiagnosed — it was actually a backend-frontend SSE wire-shape mismatch on all 4 streams. Fixed in commit `3ef416b`.
+**Snapshot taken**: 2026-05-07 ~21:05 IST (rev 3)
+**Status**: ready to demo to senior leadership. Backend + dashboard fully functional. Two engineer + reviewer pairs have polished the demo through two rounds of QA — first SSE wire-shape alignment (commit `3ef416b`), then 7 demo-quality issues found in user-driven QA (commit `584ddd7`). Latest commit verified end-to-end via Playwright with zero console errors.
+
+## Demo-quality fixes (commit `584ddd7`, rev 3)
+
+User QA round caught seven rough edges. All fixed:
+
+| # | Issue | Root cause | Fix |
+|---|---|---|---|
+| 1 | Realestate trigger fired with `event_count=4` (and Slack canned text said "3 listings", contradicting dashboard) | All 8 script events shared the same `OriginalTimestamp` — captured once at script-build time; `LastSeen` never advanced; idle ticker fired at real-time T0+10s with only 4 events ingested | Firer re-stamps `OriginalTimestamp` + `SentAt` per send (local copy, not slice mutation); window uses authoritative `receivedAt` (server clock) for `LastSeen` |
+| 2 | Live Events status stuck on "connecting" until first event | `connected` flag only flipped inside `onMessage`; `EventSource.onopen` was never wired | `lib/sse.ts` accepts `onOpen` callback; EventFeed wires `setConnected(true)` |
+| 3 | Active session card had no persistent fired indicator | `triggeredIds` was auto-cleared after 1.2s | Keep `triggeredIds` until reset; static green "🎯 trigger fired" badge in SessionCard |
+| 4 | Reset clears DB but dashboard cards persist | No reset signal flowed to frontend | `OnDemoReset` publishes `sse.EventReset` on all 4 streams; each column listens and clears in-memory state |
+| 5 | Replay shows "Replay failed: no triggers yet" after reset | Generic error wrapping; backend message was OK but UX prefix was misleading | Frontend maps "no triggers" to "No triggers to replay yet — fire a script first" |
+| 6 | Replay returned 200 but card never reappeared (separate bug found in QA) | Handler returned JSON only; no SSE re-publish | `handleReplayLastTrigger` now publishes the trigger to `sse.StreamTriggers` after DB fetch |
+| 7 | Emails tab empty after triggers fire on Dashboard tab | EmailOutbox only subscribed to SSE on mount; no initial GET fetch | `EmailOutbox.tsx` calls `listMockEmails()` on mount with functional setState merge (de-duped by id) |
+
+**E2E QA results (Playwright):** live status immediate / event_count=8 / 🎯 badges persist / reset clears 3 columns + emails tab / replay re-renders card / emails tab shows existing rows on switch / 0 console errors.
+
+## Earlier rounds
+
+
 
 This document is the canonical state-of-the-world after the live click-through smoke. It exists so the conversation can be `/compact`-ed without losing context. After compact, anyone (Claude or human) can read this file plus `PITCH.md` and resume.
 
