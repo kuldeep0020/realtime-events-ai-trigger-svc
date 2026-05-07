@@ -65,13 +65,15 @@ func runServe(args []string) {
 	// admin/seed + fire-script callbacks.
 	seedFS := api.NewDiskSeedFS()
 	apiSrv := api.New(api.Config{
-		Pool:        pool,
-		Hub:         rt.hub,
-		Seed:        seedFS,
-		WindowStore: rt.windows,
-		FireScript:  rt.fireScriptHandler,
-		AdminSeed:   rt.adminSeedHandler(seedFS),
-		OnDemoReset: rt.OnDemoReset,
+		Pool:           pool,
+		Hub:            rt.hub,
+		Seed:           seedFS,
+		WindowStore:    rt.windows,
+		FireScript:     rt.fireScriptHandler,
+		AdminSeed:      rt.adminSeedHandler(seedFS),
+		OnDemoReset:    rt.OnDemoReset,
+		EngineReloader: rt.engine.Reload,
+		Logger:         log,
 	})
 
 	httpSrv := &http.Server{

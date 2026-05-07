@@ -3,6 +3,20 @@
 **Snapshot taken**: 2026-05-07 ~23:35 IST (rev 4)
 **Status**: ready to demo to senior leadership. Service renamed to `realtime-events-ai-trigger-svc` (display: "Realtime Events AI Triggers"). Three rounds of engineer + reviewer pairs have polished the demo: SSE wire-shape alignment (`3ef416b`) → 7 demo-quality issues (`584ddd7`) → rename + 3 polish (`8d91d82`) → tab persistence + initial-fetch + race fix (next commit). Demo runbook lives at `docs/DEMO_RUNBOOK.md`.
 
+## Demo polish round 5 (rev 5)
+
+The wizard wasn't actually interactive — `handleGenerateConfig` returned the seed YAML verbatim and `handleActivateConfig` ignored `config_yaml`. Fixed:
+
+- `handleGenerateConfig` parses `req.Answers` and applies them to the YAML via `gopkg.in/yaml.v3` round-trip. Realestate honors `idle_seconds` (number, also accepts string-of-digits) and `realtors` (textarea, parses "Name → suburb-1, suburb-2" lines). RS-self honors `idle_seconds` (drives `onboarding_stuck`) and `error_events` (narrows `onboarding_errored` to selected event names). Empty/nil answers → seed verbatim.
+- `handleActivateConfig` with `config_yaml` parses + replaces rules in DB via new `db.ReplaceConfigRules`: NULLs `triggers.rule_id` FKs (preserves history), DELETE+INSERT rules, UPDATE `configs.config_yaml`. Atomic per-config tx.
+- Engine reload via new `EngineReloader` callback in `api.Config`. Activate calls `engine.Reload(ctx)` after the DB commit so customizations go live in seconds, not 30s.
+- Defensive validation: bad YAML → 400 (not 500). YAML missing `rules:` → 400 (would silently delete all rules). Reload errors are logged via `slog`; the user-facing response stays 200 (no transient warning surface needed).
+- Tests: 8 new in `handlers_onboarding_test.go` (4 generate-config edge cases + 4 activate-config edge cases including bad YAML and rules-less). All gated tests pass with TEST_DATABASE_URL.
+
+End-to-end via Playwright: edit `idle_seconds` from default 30 → 5 in wizard → YAML preview shows `idle_seconds: { '>=': 5 }` → Activate succeeds → DB confirms `spec.when.all` has idle_seconds=5 → Fire script → trigger fires with `window_snapshot.idle_seconds = 5` (not seed's 10). Wizard now drives the live rule engine.
+
+Runbook §1.3 updated to walk through the live customization. New §9 covers cluster deployment with both `DEMO_FIRE_TARGET=pulsar` and `=http` modes for production-realistic event routing.
+
 ## Demo polish round 4 (rev 4)
 
 User QA caught 5 more rough edges:

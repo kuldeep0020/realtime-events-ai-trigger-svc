@@ -51,14 +51,22 @@ Click **Next** → step 2 (Configure rules).
 
 ### 1.3 Configure & generate
 
-Step 2 shows pre-canned questions ("How many high-intent visitors do you typically see in a session?" etc). Defaults are fine for the demo — the audience just needs to see the wizard exists.
+Step 2 shows pre-filled questions:
+- **Realtors per suburb** (textarea, format `Name → suburb-1, suburb-2`)
+- **Price range / typical hot leads** (text — display only, not used in any rule)
+- **Idle seconds before abandoned** (number, default 30)
+
+> **Demo talking point**: "These answers actually drive the YAML on the next page. If leadership asks 'what if we want to fire faster?', I can change idle_seconds here and re-generate."
+
+**Live customization (recommended for the live demo)**: change `Idle seconds` from 30 → **5** to make the trigger fire faster (we'll see this fire at ~27s instead of ~32s). Optionally edit a realtor name to prove the textarea is wired.
 
 Click **Generate config**.
 
 **QA checks:**
 - [ ] Page advances to step 3 (Preview & activate)
 - [ ] Heading: "Your generated config"
-- [ ] A YAML preview shows the rule (persona: realestate, realtors list, the `realtor_session_abandoned` rule with predicates `event_count >= 3`, `path_matches /listings`, `idle_seconds >= 10`, `cooldown 3600s`)
+- [ ] YAML preview shows `realtor_session_abandoned` rule with `idle_seconds: { '>=': <your value> }` reflecting your input (NOT the seed default of 10)
+- [ ] If you edited realtors, the YAML's `realtors:` block reflects the new entries
 - [ ] **Activate & continue** button visible
 
 ### 1.4 Activate
@@ -71,9 +79,24 @@ Click **Activate & continue**.
 - [ ] Live Events column shows status `live` immediately (NOT `connecting`)
 - [ ] Audience now sees the *system listening for events* with the rule armed
 
-What just happened: the wizard's "Activate" called `POST /api/onboarding/activate` which promoted the seeded `realestate` config. The rule is now active. The dashboard's Live Events status is `live` because the SSE connection opens immediately on dashboard mount (we wired `EventSource.onopen` to set the status).
+What just happened: the wizard's "Activate" called `POST /api/onboarding/activate` with the customized `config_yaml`. The backend parsed it, replaced the rules in Postgres in a single transaction (NULLing trigger FKs first to preserve history), and called `engine.Reload(ctx)` so the new rule is live IMMEDIATELY (no 30s wait for the periodic reload tick).
 
-> **Demo talking point**: "We just authored a real-time trigger via a 3-step wizard. No code, no SQL. The rule engine evaluates this YAML against an in-memory rolling window of events as they arrive."
+You can prove the customization persisted with:
+```bash
+docker exec rt-pg psql -U postuser -d postdb -c \
+  "SELECT spec->'when'->'all' FROM rules r JOIN configs c ON r.config_id=c.id WHERE c.persona='realestate' AND c.active=true LIMIT 1;"
+# Expect: idle_seconds reflects the value YOU just typed in the wizard
+```
+
+> **Demo talking point**: "We just authored a real-time trigger via a 3-step wizard. No code, no SQL. Whatever I just typed is now live in the rules engine — when we fire events in the next step, this is the threshold that decides if the rule matches."
+
+### 1.5 Bad input handling (optional, for showing robustness)
+
+If asked "what if I submit garbage?", the activate endpoint validates user input strictly:
+- Malformed YAML → `400 invalid config_yaml: ...`
+- YAML missing the `rules:` field → `400 config_yaml must contain at least one rule`
+
+(Engine reload errors are logged but never surfaced to the wizard — the user sees success and the rule remains stale; operators can `tail /tmp/rt-svc-logs/serve.log` for warnings.)
 
 ---
 
@@ -382,7 +405,88 @@ uv sync
 
 ---
 
-## §9 Reset between rehearsals
+## §9 Cluster deployment — sending events to ingestion-svc (post-deploy)
+
+The local demo publishes events directly to a local Pulsar broker (`DEMO_FIRE_TARGET=pulsar`). When the service is deployed in your namespace, you have two options for routing events:
+
+### Option A — Direct-to-Pulsar (same as local)
+
+Useful if your deployed Pulsar is the production StreamNative cluster and you want the demo to bypass the ingestion-svc round-trip.
+
+Helm `values.yaml` overrides:
+```yaml
+env:
+  PULSAR_URL: "pulsar+ssl://pc-0148c683.aws-use1-prod-3u4fn.aws.snio.cloud:6651"
+  PULSAR_TOPIC: "persistent://public/enterprise/source-events-rudderstacvilo"
+  DEMO_FIRE_TARGET: "pulsar"
+secretEnv:
+  PULSAR_JWT_TOKEN: <streamnative-jwt>   # via --set
+```
+
+`/api/demo/fire-script` and the Python `demo_*.py --target pulsar` scripts both publish directly. The deployed backend's consumer reads from the same topic. Latency: ~1 sec from event publish → trigger fire → Slack.
+
+### Option B — Through ingestion-svc (production-realistic)
+
+This routes the demo events through the real ingestion-svc, exercising the full RudderStack data plane (auth → bot detection → Pulsar). Use this if leadership asks "is this how it'd actually look in production?".
+
+Helm `values.yaml` overrides:
+```yaml
+env:
+  INGESTION_URL: "https://rudderstacvilo.dev-rudder.rudderlabs.com"
+  DEMO_FIRE_TARGET: "http"           # ← key difference
+  ALLOWED_WRITE_KEYS: "<your-workspace-write-keys-csv>"
+  PULSAR_URL: "pulsar+ssl://..."     # consumer still reads from Pulsar
+  PULSAR_TOPIC: "persistent://public/enterprise/source-events-rudderstacvilo"
+secretEnv:
+  PULSAR_JWT_TOKEN: <streamnative-jwt>
+```
+
+When `DEMO_FIRE_TARGET=http`, `/api/demo/fire-script` POSTs `{batch:[...]}` to `${INGESTION_URL}/v1/batch` with HTTP Basic auth (writeKey as username, empty password). Ingestion-svc validates, applies bot detection, publishes to its Pulsar topic. Your deployed consumer subscribes to the same topic and processes normally. Latency adds a hop (~50-200 ms more).
+
+### Python toolkit on the cluster
+
+The Python scripts have the same `--target` flag:
+```bash
+# From your laptop, hitting the deployed ingestion-svc
+cd scripts/demo_events
+uv run demo_realestate.py --target http --ingestion-url https://rudderstacvilo.dev-rudder.rudderlabs.com -v
+
+# Or set the env var
+INGESTION_URL=https://rudderstacvilo.dev-rudder.rudderlabs.com uv run demo_realestate.py --target http -v
+```
+
+The HTTP firer uses the persona's hard-coded `--write-key` (overridable via `WRITE_KEY_REALESTATE` / `WRITE_KEY_RS_SELF` env or `--write-key`). For the deployed setup, plug in your workspace's writeKeys.
+
+### Switching modes at runtime
+
+`DEMO_FIRE_TARGET` is read at backend startup. To switch modes without a redeploy, restart the pod. For a cleaner UX, the Python toolkit can flip `--target` per invocation without touching the backend.
+
+### Sanity check post-deploy
+
+After deploy:
+```bash
+# Health check
+curl https://<your-deployed-host>/healthz
+# Expect: {"started":"...","status":"ok"}
+
+# Stream subscription works (long-running)
+curl -sN https://<your-deployed-host>/api/streams/triggers
+# Expect: ": connected\n\n" then heartbeats every 15s
+
+# Fire a script (will publish via DEMO_FIRE_TARGET path)
+curl -X POST https://<your-deployed-host>/api/demo/fire-script \
+  -H 'Content-Type: application/json' -d '{"persona":"realestate"}'
+
+# Wait ~32s, check trigger fired
+curl -s https://<your-deployed-host>/api/recent-triggers?limit=5 | jq -r '.triggers[].rule_name'
+# Expect: realtor_session_abandoned
+```
+
+If `dispatch_status=failed` for Slack on the deployed cluster, check egress firewall rules — your namespace may not have outbound HTTPS to `hooks.slack.com`. Mock email destination has no external dependencies.
+
+---
+
+## §10 Reset between rehearsals
 
 ```bash
 # Clears DB events/triggers/mock_emails/cooldowns + in-memory window store + cooldown gate
@@ -394,7 +498,7 @@ The dashboard's three columns + Emails tab clear themselves within ~50ms.
 
 ---
 
-## §10 What "passing the demo" looks like
+## §11 What "passing the demo" looks like
 
 End-to-end without:
 - Any console errors

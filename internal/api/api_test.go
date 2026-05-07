@@ -189,7 +189,9 @@ func TestGenerateConfig_BadInput(t *testing.T) {
 func TestActivateConfig_NoDB_503(t *testing.T) {
 	t.Parallel()
 	srv := newTestServer(t)
-	body := []byte(`{"persona":"realestate","config_yaml":"persona: realestate"}`)
+	// Use a valid YAML with at least one rule so that input-validation passes
+	// and the 503 is triggered by the absent DB pool, not a 400 for bad input.
+	body := []byte(`{"persona":"realestate","config_yaml":"persona: realestate\nrules:\n- name: r\n  when: {}\n  fire: {}\n"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/onboarding/activate", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()

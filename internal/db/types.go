@@ -53,6 +53,15 @@ type TriggerRow struct {
 	Error          string
 }
 
+// RuleSpec is the insert shape for a single rule row used by ReplaceConfigRules.
+// RuleMap is the full rule map (name + when + fire) that gets stored as JSONB
+// in the rules.spec column — matching the shape the seed loader uses.
+type RuleSpec struct {
+	Name    string
+	RuleMap map[string]any // full rule body (name, when, fire) stored as JSONB
+	Enabled bool
+}
+
 // MockEmailRow is the insert shape for mock_emails.
 type MockEmailRow struct {
 	TriggerID    *uuid.UUID // nullable FK

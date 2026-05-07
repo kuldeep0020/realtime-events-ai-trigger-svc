@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -334,6 +335,70 @@ func LoadActionTemplate(ctx context.Context, pool *pgxpool.Pool, name string) (s
 		return "", "", "", oops.Wrapf(err, "LoadActionTemplate")
 	}
 	return system, user, format, nil
+}
+
+// ReplaceConfigRules replaces all rules for a config in a single transaction.
+// It also updates the config's config_yaml column and marks it active (while
+// marking all other configs for the same persona inactive). This is the wizard
+// customization path: the seeded config row is rewritten in-place rather than
+// creating a new row, so the engine reload that follows picks up the new rules
+// without any orphaned references.
+func ReplaceConfigRules(ctx context.Context, pool *pgxpool.Pool, configID uuid.UUID, persona, configYAML string, rules []RuleSpec) error {
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return oops.Wrapf(err, "ReplaceConfigRules begin tx")
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	// Update the config row: new YAML + mark active.
+	if _, err := tx.Exec(ctx,
+		`UPDATE configs SET config_yaml = $1, active = TRUE WHERE id = $2`,
+		configYAML, configID,
+	); err != nil {
+		return oops.Wrapf(err, "ReplaceConfigRules update config")
+	}
+
+	// Deactivate all other configs for this persona.
+	if _, err := tx.Exec(ctx,
+		`UPDATE configs SET active = FALSE WHERE persona = $1 AND id <> $2`,
+		persona, configID,
+	); err != nil {
+		return oops.Wrapf(err, "ReplaceConfigRules deactivate others")
+	}
+
+	// Nullify FK references from triggers to the old rules so the DELETE
+	// doesn't violate the triggers.rule_id → rules.id constraint.
+	// triggers.rule_id is nullable (the column has no NOT NULL), so this
+	// preserves trigger history while allowing the rule rows to be replaced.
+	if _, err := tx.Exec(ctx, `
+		UPDATE triggers SET rule_id = NULL
+		WHERE rule_id IN (SELECT id FROM rules WHERE config_id = $1)`, configID); err != nil {
+		return oops.Wrapf(err, "ReplaceConfigRules nullify trigger rule_id refs")
+	}
+
+	// Delete existing rules for this config (replaced wholesale).
+	if _, err := tx.Exec(ctx, `DELETE FROM rules WHERE config_id = $1`, configID); err != nil {
+		return oops.Wrapf(err, "ReplaceConfigRules delete old rules")
+	}
+
+	// Insert the new rules.
+	for i, r := range rules {
+		spec, err := json.Marshal(r.RuleMap)
+		if err != nil {
+			return oops.With("rule_index", i).With("rule_name", r.Name).Wrapf(err, "ReplaceConfigRules marshal spec")
+		}
+		if _, err := tx.Exec(ctx,
+			`INSERT INTO rules (config_id, name, spec, enabled) VALUES ($1, $2, $3::jsonb, $4)`,
+			configID, r.Name, spec, r.Enabled,
+		); err != nil {
+			return oops.With("rule_name", r.Name).Wrapf(err, "ReplaceConfigRules insert rule")
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return oops.Wrapf(err, "ReplaceConfigRules commit")
+	}
+	return nil
 }
 
 // --- helpers ---

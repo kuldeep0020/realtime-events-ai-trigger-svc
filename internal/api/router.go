@@ -8,6 +8,7 @@ package api
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -47,6 +48,12 @@ type AdminSeedFunc func(ctx context.Context) error
 // number of cooldown entries and windows cleared.
 type DemoResetFunc func(ctx context.Context) (cooldownsCleared, windowsCleared int, err error)
 
+// EngineReloadFunc is the optional callback invoked by handleActivateConfig
+// after persisting a custom config YAML. Calling it triggers an immediate rule
+// reload so the new rules are live before the next 30-second periodic tick.
+// Nil → skip (the periodic reloader will pick up changes eventually).
+type EngineReloadFunc func(ctx context.Context) error
+
 // Server wires the API. Construct via New, then mount via Handler().
 type Server struct {
 	pool        *pgxpool.Pool
@@ -67,35 +74,53 @@ type Server struct {
 	// onDemoReset is invoked after the PG truncate in handleDemoReset. Nil → skip.
 	onDemoReset DemoResetFunc
 
+	// engineReloader is invoked after a successful activate-with-yaml so
+	// the rules engine picks up the new rules immediately rather than
+	// waiting for the 30-second periodic reload tick.
+	engineReloader EngineReloadFunc
+
+	// logger is used for structured server-side logging. Defaults to
+	// slog.Default() when not set in Config.
+	logger *slog.Logger
+
 	// startedAt records process boot time for /metrics and /healthz.
 	startedAt time.Time
 }
 
 // Config wires runtime options.
 type Config struct {
-	Pool        *pgxpool.Pool
-	Hub         *sse.Hub
-	Seed        SeedFS
-	WindowStore *window.Store
-	FireScript  FireScriptFunc
-	AdminSeed   AdminSeedFunc
-	OnDemoReset DemoResetFunc
+	Pool           *pgxpool.Pool
+	Hub            *sse.Hub
+	Seed           SeedFS
+	WindowStore    *window.Store
+	FireScript     FireScriptFunc
+	AdminSeed      AdminSeedFunc
+	OnDemoReset    DemoResetFunc
+	EngineReloader EngineReloadFunc
+	// Logger is used for structured server-side logging. Nil → slog.Default().
+	Logger *slog.Logger
 }
 
 // New builds a Server with the supplied dependencies and wires the chi
 // router. Pool may be nil for tests that don't exercise DB-backed
 // endpoints; in that case those endpoints return 503.
 func New(cfg Config) *Server {
+	logger := cfg.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
 	s := &Server{
-		pool:        cfg.Pool,
-		hub:         cfg.Hub,
-		seed:        cfg.Seed,
-		windowStore: cfg.WindowStore,
-		fireScript:  cfg.FireScript,
-		adminSeed:   cfg.AdminSeed,
-		onDemoReset: cfg.OnDemoReset,
-		metrics:     newMetrics(),
-		startedAt:   time.Now().UTC(),
+		pool:           cfg.Pool,
+		hub:            cfg.Hub,
+		seed:           cfg.Seed,
+		windowStore:    cfg.WindowStore,
+		fireScript:     cfg.FireScript,
+		adminSeed:      cfg.AdminSeed,
+		onDemoReset:    cfg.OnDemoReset,
+		engineReloader: cfg.EngineReloader,
+		logger:         logger,
+		metrics:        newMetrics(),
+		startedAt:      time.Now().UTC(),
 	}
 	if s.hub == nil {
 		s.hub = sse.NewHub()
