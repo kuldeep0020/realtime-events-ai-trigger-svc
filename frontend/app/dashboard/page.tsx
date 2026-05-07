@@ -17,6 +17,8 @@ import { EventFeed } from "@/components/dashboard/EventFeed";
 import { WindowInspector } from "@/components/dashboard/WindowInspector";
 import { TriggerStream } from "@/components/dashboard/TriggerStream";
 import { EmailOutbox } from "@/components/dashboard/EmailOutbox";
+import { OutcomeBanner } from "@/components/dashboard/OutcomeBanner";
+import { ROITile } from "@/components/dashboard/ROITile";
 import { Controller } from "@/components/demo/Controller";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSSEStream } from "@/lib/sse";
@@ -103,10 +105,16 @@ function DashboardContent() {
             switches. The inactive panel is hidden via data-[state=inactive]. */}
         <TabsContent
           value="dashboard"
-          className="flex-1 overflow-hidden m-0 data-[state=inactive]:hidden"
+          className="flex-1 overflow-hidden m-0 data-[state=inactive]:hidden flex flex-col"
           forceMount
         >
-          <div className="grid h-full grid-cols-3 divide-x divide-slate-800/60">
+          {/* ROI summary tile — above column grid */}
+          <ROITile />
+
+          {/* Outcome banner — cycles through recent trigger outcomes */}
+          <OutcomeBanner />
+
+          <div className="grid flex-1 min-h-0 grid-cols-3 divide-x divide-slate-800/60">
             {/* Column 1 — Live events */}
             <div className="min-h-0 overflow-hidden">
               <EventFeed highlightedIds={highlightedIds} />
