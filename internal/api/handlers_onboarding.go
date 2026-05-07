@@ -2,11 +2,14 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/db"
 )
 
 // generateConfigRequest is the body shape for POST /api/onboarding/generate-config.
@@ -92,10 +95,15 @@ type activateConfigResponse struct {
 	Persona string `json:"persona"`
 }
 
-// handleActivateConfig marks a configs row active=true, deactivating any
-// other active config for the same (tenant_id, persona). When `id` is
-// missing, we insert a new row from `persona`+`config_yaml`+`tenant_id`,
-// then activate it.
+// handleActivateConfig promotes the seeded config for a persona to active=true,
+// deactivating all other configs for that persona. No new rows are ever
+// inserted — the operation is idempotent.
+//
+// Accepted request shapes:
+//   - {"persona":"realestate"} — promotes the oldest config that has rules.
+//   - {"persona":"realestate","config_yaml":"..."} — same; config_yaml is
+//     ignored (the seeded config already has the correct YAML).
+//   - {"id":"<uuid>"} — legacy path: promotes a specific config by UUID.
 func (s *Server) handleActivateConfig(w http.ResponseWriter, r *http.Request) {
 	if s.pool == nil {
 		writeError(w, http.StatusServiceUnavailable, "database unavailable")
@@ -109,74 +117,72 @@ func (s *Server) handleActivateConfig(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
-	var (
-		id      uuid.UUID
-		persona string
-	)
 	switch {
 	case req.ID != "":
+		// Legacy path: promote a specific config by UUID. Used when the caller
+		// already knows the exact config row to activate (e.g. admin tooling).
 		parsed, err := uuid.Parse(req.ID)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "invalid id (not a UUID)")
 			return
 		}
-		id = parsed
-		// Read the persona for the response shape and for the deactivation step.
-		err = s.pool.QueryRow(ctx, `SELECT persona FROM configs WHERE id = $1`, id).Scan(&persona)
-		if err != nil {
+
+		var persona string
+		if err := s.pool.QueryRow(ctx, `SELECT persona FROM configs WHERE id = $1`, parsed).Scan(&persona); err != nil {
 			writeError(w, http.StatusNotFound, "config not found")
 			return
 		}
-	case req.Persona != "" && req.ConfigYAML != "":
-		tenantID := req.TenantID
-		if tenantID == "" {
-			tenantID = "default"
-		}
-		var newID uuid.UUID
-		err := s.pool.QueryRow(ctx, `
-			INSERT INTO configs (tenant_id, persona, config_yaml)
-			VALUES ($1, $2, $3)
-			RETURNING id`,
-			tenantID, req.Persona, req.ConfigYAML,
-		).Scan(&newID)
+
+		tx, err := s.pool.Begin(ctx)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "failed to insert config: "+err.Error())
+			writeError(w, http.StatusInternalServerError, "failed to begin tx: "+err.Error())
 			return
 		}
-		id = newID
-		persona = req.Persona
+		defer func() { _ = tx.Rollback(ctx) }()
+
+		if _, err := tx.Exec(ctx, `UPDATE configs SET active = FALSE WHERE persona = $1 AND id <> $2`, persona, parsed); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to deactivate prior configs: "+err.Error())
+			return
+		}
+		if _, err := tx.Exec(ctx, `UPDATE configs SET active = TRUE WHERE id = $1`, parsed); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to activate config: "+err.Error())
+			return
+		}
+		if err := tx.Commit(ctx); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to commit: "+err.Error())
+			return
+		}
+
+		writeJSON(w, http.StatusOK, activateConfigResponse{
+			ID:      parsed.String(),
+			Active:  true,
+			Persona: persona,
+		})
+
+	case req.Persona != "":
+		// Wizard path: promote the seeded config (oldest config with rules) for
+		// this persona. Never inserts a new row. config_yaml is accepted but
+		// intentionally not applied — the demo uses preset configs and altering
+		// the YAML live is out of scope.
+		seededID, err := db.ActivatePersonaSeededConfig(ctx, s.pool, req.Persona)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				writeError(w, http.StatusNotFound, "no config with rules found for persona: "+req.Persona)
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "failed to activate config: "+err.Error())
+			return
+		}
+
+		writeJSON(w, http.StatusOK, activateConfigResponse{
+			ID:      seededID.String(),
+			Active:  true,
+			Persona: req.Persona,
+		})
+
 	default:
-		writeError(w, http.StatusBadRequest, "either id or (persona + config_yaml) is required")
+		writeError(w, http.StatusBadRequest, "either id or persona is required")
 		return
 	}
-
-	// Deactivate other active configs for this (tenant, persona), then activate the chosen one.
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to begin tx: "+err.Error())
-		return
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	if _, err := tx.Exec(ctx, `
-		UPDATE configs SET active = FALSE
-		WHERE persona = $1 AND active = TRUE AND id <> $2`, persona, id); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to deactivate prior configs: "+err.Error())
-		return
-	}
-	if _, err := tx.Exec(ctx, `UPDATE configs SET active = TRUE WHERE id = $1`, id); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to activate config: "+err.Error())
-		return
-	}
-	if err := tx.Commit(ctx); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to commit: "+err.Error())
-		return
-	}
-
-	writeJSON(w, http.StatusOK, activateConfigResponse{
-		ID:      id.String(),
-		Active:  true,
-		Persona: persona,
-	})
 }
 

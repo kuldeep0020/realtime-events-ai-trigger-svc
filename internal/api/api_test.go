@@ -329,6 +329,74 @@ readLoop:
 	}
 }
 
+// TestSSEStream_EventNameMatchesStreamName verifies that the SSE wire format
+// emitted for the "events" stream carries `event: events` — matching the name
+// the frontend's addEventListener registers. This is the regression test for
+// the singular/plural mismatch bug.
+func TestSSEStream_EventNameMatchesStreamName(t *testing.T) {
+	t.Parallel()
+	srv := newTestServer(t)
+
+	httpSrv := httptest.NewServer(srv.Handler())
+	defer httpSrv.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, httpSrv.URL+"/api/streams/events", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET stream: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	// Publish a message with Event set to the stream name (the correct value
+	// after the fix). The raw wire format must contain "event: events".
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		srv.hub.Publish(sse.StreamEvents, sse.Message{
+			Event: sse.StreamEvents,
+			Data:  map[string]any{"event_type": "page"},
+		})
+	}()
+
+	buf := make([]byte, 4096)
+	deadline := time.After(2 * time.Second)
+	var collected strings.Builder
+readLoop:
+	for {
+		select {
+		case <-deadline:
+			t.Fatalf("timeout waiting for SSE payload, got: %q", collected.String())
+		default:
+			n, readErr := resp.Body.Read(buf)
+			if n > 0 {
+				collected.Write(buf[:n])
+				body := collected.String()
+				if strings.Contains(body, "event: events") &&
+					strings.Contains(body, "event_type") {
+					break readLoop
+				}
+			}
+			if readErr != nil {
+				if collected.Len() == 0 {
+					t.Fatalf("unexpected read error: %v", readErr)
+				}
+				return
+			}
+		}
+	}
+
+	// Negative assertion: the broken singular form must NOT appear.
+	if strings.Contains(collected.String(), "event: event\n") {
+		t.Errorf("found broken singular 'event: event' in wire output — event name mismatch not fixed")
+	}
+}
+
 func TestSSEStream_UnknownStreamReturns404(t *testing.T) {
 	t.Parallel()
 	srv := newTestServer(t)

@@ -181,6 +181,61 @@ func InsertTrigger(ctx context.Context, pool *pgxpool.Pool, t TriggerRow) (uuid.
 	return id, nil
 }
 
+// ActivatePersonaSeededConfig promotes the oldest config that has at least one
+// enabled rule for the given persona to active=true, and marks all other
+// configs for that persona inactive. It does NOT insert any new rows.
+//
+// "Seeded" is defined as the config with the earliest created_at that owns at
+// least one enabled rule — this is exactly the row inserted by the seed runner
+// and is the one the rules engine needs active.
+//
+// Returns (seededConfigID, error). Returns pgx.ErrNoRows when no config with
+// rules exists for the persona.
+func ActivatePersonaSeededConfig(ctx context.Context, pool *pgxpool.Pool, persona string) (uuid.UUID, error) {
+	// Find the oldest config for this persona that owns at least one enabled rule.
+	const findQ = `
+		SELECT c.id
+		FROM configs c
+		JOIN rules r ON r.config_id = c.id
+		WHERE c.persona = $1 AND r.enabled = TRUE
+		ORDER BY c.created_at ASC
+		LIMIT 1`
+
+	var seededID uuid.UUID
+	if err := pool.QueryRow(ctx, findQ, persona).Scan(&seededID); err != nil {
+		if isNoRows(err) {
+			return uuid.UUID{}, pgx.ErrNoRows
+		}
+		return uuid.UUID{}, oops.Wrapf(err, "ActivatePersonaSeededConfig find")
+	}
+
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return uuid.UUID{}, oops.Wrapf(err, "ActivatePersonaSeededConfig begin tx")
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	// Deactivate every other config for this persona.
+	if _, err := tx.Exec(ctx, `
+		UPDATE configs SET active = FALSE
+		WHERE persona = $1 AND id <> $2`, persona, seededID); err != nil {
+		return uuid.UUID{}, oops.Wrapf(err, "ActivatePersonaSeededConfig deactivate others")
+	}
+
+	// Activate the seeded config.
+	if _, err := tx.Exec(ctx, `
+		UPDATE configs SET active = TRUE
+		WHERE id = $1`, seededID); err != nil {
+		return uuid.UUID{}, oops.Wrapf(err, "ActivatePersonaSeededConfig activate seeded")
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return uuid.UUID{}, oops.Wrapf(err, "ActivatePersonaSeededConfig commit")
+	}
+
+	return seededID, nil
+}
+
 // LoadCannedResponse returns the raw_json for the highest-priority canned
 // response matching (templateName, persona). Returns pgx.ErrNoRows when absent.
 func LoadCannedResponse(ctx context.Context, pool *pgxpool.Pool, templateName, persona string) ([]byte, error) {
