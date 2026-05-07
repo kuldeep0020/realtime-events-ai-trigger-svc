@@ -434,6 +434,34 @@ func TestCooldownTracking(t *testing.T) {
 	})
 }
 
+// TestSSEStream_TriggerWindowSnapshotIdleSeconds verifies that snapshots
+// produced by ScanIdle carry a non-zero IdleSeconds value. This is the
+// regression test for the bug where ScanIdle omitted the IdleSeconds
+// population step that Store.Snapshot performs, causing the TriggerCard
+// "Why" panel to display "Idle: 0s" even when an idle-time rule had just
+// fired.
+func TestSSEStream_TriggerWindowSnapshotIdleSeconds(t *testing.T) {
+	s := New(0)
+	// Place LastSeen 12 seconds in the past so ScanIdle(1s, …) includes it.
+	lastSeen := time.Now().UTC().Add(-12 * time.Second)
+	s.WithWindow("anon-idle-test", func(w *UserWindow) {
+		w.LastSeen = lastSeen
+	})
+
+	var captured []Snapshot
+	s.ScanIdle(time.Second, func(snap Snapshot) {
+		captured = append(captured, snap)
+	})
+
+	if len(captured) != 1 {
+		t.Fatalf("expected 1 snapshot from ScanIdle, got %d", len(captured))
+	}
+	snap := captured[0]
+	if snap.IdleSeconds < 10 {
+		t.Errorf("IdleSeconds = %d, want >= 10 (LastSeen was 12s ago)", snap.IdleSeconds)
+	}
+}
+
 func TestUpdateNilEventNoop(t *testing.T) {
 	s := New(0)
 	s.Update(nil)

@@ -55,7 +55,7 @@ func (rt *runtime) fireMatch(ctx context.Context, m rules.Match, persona string)
 	}
 
 	payload := dispatch.NewLLMPayload(result.Template, result.Parsed, result.Raw)
-	dispatchStatus, _, dispatchErr := rt.dispatcher.Dispatch(ctx,
+	dispatchStatus, dispatchedURL, dispatchErr := rt.dispatcher.Dispatch(ctx,
 		m.Fire.Destination, payload, persona, m.Anonymous, m.RuleName,
 	)
 	if dispatchErr != nil {
@@ -103,21 +103,55 @@ func (rt *runtime) fireMatch(ctx context.Context, m rules.Match, persona string)
 			"rule_name":       m.RuleName,
 			"persona":         persona,
 			"anonymous_id":    m.Anonymous,
-			"fired_at":        m.FiredAt,
+			"fired_at":        m.FiredAt.UTC().Format(time.RFC3339),
+			"window_snapshot": m.Snapshot,
 			"destination":     m.Fire.Destination,
 			"dispatch_status": dispatchStatus,
 			"llm_parsed":      result.Parsed,
 		},
 	})
 	if scheme, _, _ := splitDest(m.Fire.Destination); scheme == "email" {
+		// emailID is the UUID portion of the mock-email row, extracted from the
+		// deep-link URL that MockEmailBackend returns ("/api/mock-emails/<uuid>").
+		emailID := strings.TrimPrefix(dispatchedURL, "/api/mock-emails/")
+		// Skip the SSE publish entirely when dispatch failed or the URL did not
+		// resolve to a real mock-email row. Publishing an empty id would put
+		// malformed data on the wire; the frontend drops it silently via
+		// `if (!payload.id) return`, but it is still incorrect.
+		if dispatchErr != nil || emailID == "" {
+			return
+		}
+
+		// Build the links array from doc_links in the parsed LLM result.
+		var links []map[string]any
+		if dl, ok := result.Parsed["doc_links"]; ok && dl != nil {
+			if rawLinks, ok2 := dl.([]any); ok2 {
+				for _, item := range rawLinks {
+					if lm, ok3 := item.(map[string]any); ok3 {
+						entry := map[string]any{
+							"title": stringFromMap(lm, "title"),
+							"url":   stringFromMap(lm, "url"),
+						}
+						links = append(links, entry)
+					}
+				}
+			}
+		}
+
+		emailData := map[string]any{
+			"id":            emailID,
+			"trigger_id":    triggerID.String(),
+			"to_email":      m.Anonymous + "@example.com",
+			"subject":       stringFromMap(result.Parsed, "subject"),
+			"body_markdown": stringFromMap(result.Parsed, "body_markdown"),
+			"created_at":    now.UTC().Format(time.RFC3339),
+		}
+		if len(links) > 0 {
+			emailData["links"] = links
+		}
 		rt.hub.Publish(sse.StreamMockEmails, sse.Message{
 			Event: sse.StreamMockEmails,
-			Data: map[string]any{
-				"trigger_id": triggerID.String(),
-				"persona":    persona,
-				"subject":    stringFromMap(result.Parsed, "subject"),
-				"body_md":    stringFromMap(result.Parsed, "body_markdown"),
-			},
+			Data:  emailData,
 		})
 	}
 }

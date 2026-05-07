@@ -131,6 +131,9 @@ func (s *Store) Update(evt *event.Event) {
 // Snapshot returns an immutable deep-copy of the window for anonID, or
 // (zero, false) if no window exists. Safe to call concurrently with WithWindow
 // and other reads.
+//
+// IdleSeconds is populated here using the snapshot's own LastSeen so
+// SSE consumers receive a ready-to-display figure without a separate call.
 func (s *Store) Snapshot(anonID string) (Snapshot, bool) {
 	if anonID == "" {
 		return Snapshot{}, false
@@ -144,6 +147,7 @@ func (s *Store) Snapshot(anonID string) (Snapshot, bool) {
 	}
 	snap := w.snapshot()
 	sh.mu.RUnlock()
+	snap.IdleSeconds = int(snap.IdleFor(time.Now()).Seconds())
 	return snap, true
 }
 
@@ -171,6 +175,10 @@ func (s *Store) ScanIdle(idleAtLeast time.Duration, fn func(Snapshot)) {
 		}
 		sh.mu.RUnlock()
 		for _, snap := range batch {
+			// Mirror Store.Snapshot: populate IdleSeconds so SSE consumers
+			// (e.g. the TriggerCard "Why" panel) see the correct idle figure
+			// instead of the zero-value default.
+			snap.IdleSeconds = int(snap.IdleFor(now).Seconds())
 			fn(snap)
 		}
 	}

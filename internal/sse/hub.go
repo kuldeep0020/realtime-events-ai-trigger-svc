@@ -52,6 +52,11 @@ const (
 // EventHeartbeat is the SSE event type used for periodic keepalives.
 const EventHeartbeat = "heartbeat"
 
+// EventWindowPruned is the SSE event type emitted when a window is evicted
+// from the in-memory store. Matches the string the frontend WindowInspector
+// listener registers ("window_pruned").
+const EventWindowPruned = "window_pruned"
+
 // Tunables. Kept package-private so tests have a single override point.
 const (
 	subscriberBufferSize = 64

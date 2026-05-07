@@ -93,7 +93,7 @@ func (rt *runtime) fanoutPrunes(ctx context.Context) {
 				return
 			}
 			rt.hub.Publish(sse.StreamWindows, sse.Message{
-				Event: "window_pruned",
+				Event: sse.EventWindowPruned,
 				Data:  map[string]string{"anonymous_id": anonID},
 			})
 		}
@@ -252,18 +252,50 @@ func (rt *runtime) evaluateAndDispatchSnap(_ context.Context, snap window.Snapsh
 	}
 }
 
-// eventSummary returns a compact JSON-safe summary for the SSE events
-// stream. We don't ship the full payload — the dashboard just needs
-// enough to render a row.
-func (rt *runtime) eventSummary(pe consumer.ProcessedEvent) map[string]any {
-	return map[string]any{
-		"anonymous_id":  pe.Event.EffectiveAnonymousID(),
-		"user_id":       pe.Event.UserID,
-		"event_type":    pe.Event.Type,
-		"event_name":    pe.Event.Event,
-		"page_path":     pe.Event.PagePath(),
-		"received_at":   pe.ReceivedAt,
-		"pulsar_msg_id": pe.PulsarMessageID,
-		"write_key":     pe.WriteKey,
+// sseEventDTO matches the SSEEventPayload TypeScript type in
+// frontend/types/api.ts (§3.10 / §6.4). JSON tags are camelCase to match the
+// v3 RudderStack JS-SDK wire shape the frontend expects.
+// Extra backend fields (pagePath, writeKey, pulsarMessageId) are included so
+// the dashboard has routing context without a separate fetch; the frontend
+// ignores unknown keys.
+type sseEventDTO struct {
+	Type              string         `json:"type"`
+	Channel           string         `json:"channel"`
+	Event             string         `json:"event,omitempty"`
+	AnonymousID       string         `json:"anonymousId"`
+	UserID            string         `json:"userId,omitempty"`
+	MessageID         string         `json:"messageId"`
+	OriginalTimestamp string         `json:"originalTimestamp"`
+	Properties        map[string]any `json:"properties,omitempty"`
+	Context           map[string]any `json:"context,omitempty"`
+	Traits            map[string]any `json:"traits,omitempty"`
+	// Extra backend fields (frontend ignores):
+	PagePath        string `json:"pagePath,omitempty"`
+	WriteKey        string `json:"writeKey,omitempty"`
+	PulsarMessageID string `json:"pulsarMessageId,omitempty"`
+}
+
+// eventSummary returns an SSE payload for the events stream that matches
+// SSEEventPayload in frontend/types/api.ts. The camelCase field names are
+// mandatory — the frontend EventCard reads event.payload.anonymousId directly.
+func (rt *runtime) eventSummary(pe consumer.ProcessedEvent) sseEventDTO {
+	dto := sseEventDTO{
+		Type:              pe.Event.Type,
+		Channel:           pe.Event.Channel,
+		Event:             pe.Event.Event,
+		AnonymousID:       pe.Event.EffectiveAnonymousID(),
+		UserID:            pe.Event.UserID,
+		MessageID:         pe.Event.MessageID,
+		OriginalTimestamp: pe.Event.OriginalTimestamp.UTC().Format("2006-01-02T15:04:05.000Z"),
+		PagePath:          pe.Event.PagePath(),
+		WriteKey:          pe.WriteKey,
+		PulsarMessageID:   pe.PulsarMessageID,
 	}
+	if props := pe.Event.PropertiesMap(); len(props) > 0 {
+		dto.Properties = props
+	}
+	if traits := pe.Event.TraitsMap(); len(traits) > 0 {
+		dto.Traits = traits
+	}
+	return dto
 }

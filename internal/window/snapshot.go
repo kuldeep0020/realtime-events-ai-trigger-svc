@@ -22,23 +22,33 @@ import (
 // time. Returned by Store.Snapshot and emitted by Store.ScanIdle. All map and
 // slice fields are owned by the snapshot — callers may read freely without
 // holding any lock.
+//
+// JSON tags use snake_case to match the SSEWindowPayload TypeScript type in
+// frontend/types/api.ts. Extra backend fields (PropertyMaxNum, PropertyLast,
+// Traits, SessionID, TriggeredRules, FirstSeen, DistinctPaths, PathLatest,
+// LastErrorEvent) are serialized but the frontend ignores them.
 type Snapshot struct {
-	AnonymousID    string
-	UserID         string
-	EventCount     int
-	EventTypeCount map[string]int
-	EventNameCount map[string]int
-	DistinctPaths  map[string]int
-	PathLatest     string
-	PropertyMaxNum map[string]float64
-	PropertyLast   map[string]any
-	HasErrorEvent  bool
-	LastErrorEvent event.EventRef
-	FirstSeen      time.Time
-	LastSeen       time.Time
-	Traits         map[string]any
-	SessionID      int64
-	TriggeredRules map[string]time.Time
+	AnonymousID    string             `json:"anonymous_id"`
+	UserID         string             `json:"user_id,omitempty"`
+	EventCount     int                `json:"event_count"`
+	EventTypeCount map[string]int     `json:"event_type_count"`
+	EventNameCount map[string]int     `json:"event_name_count"`
+	DistinctPaths  map[string]int     `json:"distinct_paths,omitempty"`
+	PathLatest     string             `json:"path_latest,omitempty"`
+	PropertyMaxNum map[string]float64 `json:"property_max_num,omitempty"`
+	PropertyLast   map[string]any     `json:"property_last,omitempty"`
+	HasErrorEvent  bool               `json:"has_error_event"`
+	LastErrorEvent event.EventRef     `json:"last_error_event,omitempty"`
+	FirstSeen      time.Time          `json:"first_seen,omitempty"`
+	LastSeen       time.Time          `json:"last_seen"`
+	Traits         map[string]any     `json:"traits,omitempty"`
+	SessionID      int64              `json:"session_id,omitempty"`
+	TriggeredRules map[string]time.Time `json:"triggered_rules,omitempty"`
+	// IdleSeconds is the number of whole seconds the window has been idle as
+	// of the snapshot. Populated by Store.Snapshot so SSE consumers (and the
+	// frontend's TriggerCard "Why" section) can display the idle figure without
+	// a separate computation.
+	IdleSeconds int `json:"idle_seconds"`
 }
 
 // IdleFor returns how long the window has been idle relative to now. Zero or
