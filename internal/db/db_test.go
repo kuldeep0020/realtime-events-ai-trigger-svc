@@ -178,13 +178,16 @@ func TestIntegration(t *testing.T) {
 	})
 
 	t.Run("InsertMockEmail", func(t *testing.T) {
-		err := db.InsertMockEmail(ctx, pool, db.MockEmailRow{
+		id, err := db.InsertMockEmail(ctx, pool, db.MockEmailRow{
 			ToEmail:      "test@example.com",
 			Subject:      "Test Subject",
 			BodyMarkdown: "Hello world",
 		})
 		if err != nil {
 			t.Fatalf("InsertMockEmail: %v", err)
+		}
+		if id == (uuid.UUID{}) {
+			t.Errorf("expected non-zero UUID, got zero")
 		}
 	})
 }

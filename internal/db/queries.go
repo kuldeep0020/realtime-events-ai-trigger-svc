@@ -240,22 +240,25 @@ func LoadProfile(ctx context.Context, pool *pgxpool.Pool, entity, idType, idValu
 	return traits, nil
 }
 
-// InsertMockEmail inserts a row into mock_emails.
-func InsertMockEmail(ctx context.Context, pool *pgxpool.Pool, m MockEmailRow) error {
+// InsertMockEmail inserts a row into mock_emails and returns the generated UUID.
+func InsertMockEmail(ctx context.Context, pool *pgxpool.Pool, m MockEmailRow) (uuid.UUID, error) {
 	const q = `
 		INSERT INTO mock_emails (trigger_id, to_email, subject, body_markdown, links)
-		VALUES ($1, $2, $3, $4, $5)`
+		VALUES ($1, $2, $3, $4, $5)
+		RETURNING id`
 
-	if _, err := pool.Exec(ctx, q,
+	var id uuid.UUID
+	err := pool.QueryRow(ctx, q,
 		m.TriggerID,
 		m.ToEmail,
 		m.Subject,
 		m.BodyMarkdown,
 		nullableBytes(m.Links),
-	); err != nil {
-		return oops.Wrapf(err, "InsertMockEmail")
+	).Scan(&id)
+	if err != nil {
+		return uuid.UUID{}, oops.Wrapf(err, "InsertMockEmail")
 	}
-	return nil
+	return id, nil
 }
 
 // LoadActionTemplate returns the system prompt, user prompt template, and
