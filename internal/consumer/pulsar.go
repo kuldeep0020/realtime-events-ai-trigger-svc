@@ -38,6 +38,24 @@ type Config struct {
 	// OperationTimeout is the per-operation timeout for Pulsar client calls.
 	// Zero uses the library default (30s).
 	OperationTimeout time.Duration
+
+	// TLSTrustCertsFile is an optional path to a PEM-encoded CA cert used to
+	// trust the broker's TLS certificate. Required for self-signed brokers
+	// (e.g. the local Docker Pulsar in dev/demo). Empty falls back to the
+	// system trust store, which is correct for the StreamNative production
+	// cluster.
+	TLSTrustCertsFile string
+
+	// TLSValidateHostname controls hostname verification on the broker cert.
+	// Defaults to true. Set to false only when intentionally connecting to a
+	// broker whose cert SANs do not include the address you connect with
+	// (rare; usually a misconfiguration).
+	TLSValidateHostname bool
+
+	// TLSAllowInsecure disables broker cert verification entirely. Should
+	// remain false in all real deployments; exposed only for emergency
+	// debugging. Defaults to false.
+	TLSAllowInsecure bool
 }
 
 // Consumer wraps a Pulsar client and consumer and exposes a Run loop that
@@ -86,9 +104,12 @@ func New(ctx context.Context, cfg Config, out chan<- ProcessedEvent, log *slog.L
 	}
 
 	clientOpts := pulsar.ClientOptions{
-		URL:               cfg.URL,
-		ConnectionTimeout: connectTimeout,
-		OperationTimeout:  operationTimeout,
+		URL:                        cfg.URL,
+		ConnectionTimeout:          connectTimeout,
+		OperationTimeout:           operationTimeout,
+		TLSTrustCertsFilePath:      cfg.TLSTrustCertsFile,
+		TLSValidateHostname:        cfg.TLSValidateHostname,
+		TLSAllowInsecureConnection: cfg.TLSAllowInsecure,
 	}
 
 	if cfg.Token != "" {

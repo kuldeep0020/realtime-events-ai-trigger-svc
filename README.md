@@ -30,6 +30,14 @@ make serve
 make demo-fire-realestate
 # or:
 make demo-fire-rs-self
+
+# Alternatively, publish events directly to Pulsar (skips the HTTP gateway).
+# Requires PULSAR_URL, PULSAR_JWT_TOKEN, and PULSAR_TOPIC to be set in env.
+./realtime-trigger demo-fire --persona realestate --target pulsar
+# With an explicit write-key and a self-signed CA cert for a local broker:
+./realtime-trigger demo-fire --persona realestate --target pulsar \
+  --write-key 3DNyjJW7sRSqftUb1UQuMJdxlFw \
+  --pulsar-tls-certs /path/to/ca.cert.pem
 ```
 
 ---
