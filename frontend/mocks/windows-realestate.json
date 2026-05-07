@@ -1,0 +1,38 @@
+[
+  {
+    "anonymous_id": "anon_demo-re-001",
+    "event_count": 2,
+    "event_type_count": { "identify": 1, "page": 1 },
+    "event_name_count": {},
+    "last_seen": "2026-05-07T08:00:02.000Z",
+    "has_error_event": false,
+    "idle_seconds": 0
+  },
+  {
+    "anonymous_id": "anon_demo-re-001",
+    "event_count": 4,
+    "event_type_count": { "identify": 1, "page": 1, "track": 2 },
+    "event_name_count": { "Listing Viewed": 1, "Filter Applied": 1 },
+    "last_seen": "2026-05-07T08:00:09.000Z",
+    "has_error_event": false,
+    "idle_seconds": 0
+  },
+  {
+    "anonymous_id": "anon_demo-re-001",
+    "event_count": 6,
+    "event_type_count": { "identify": 1, "page": 1, "track": 4 },
+    "event_name_count": { "Listing Viewed": 3, "Filter Applied": 1 },
+    "last_seen": "2026-05-07T08:00:17.000Z",
+    "has_error_event": false,
+    "idle_seconds": 0
+  },
+  {
+    "anonymous_id": "anon_demo-re-001",
+    "event_count": 7,
+    "event_type_count": { "identify": 1, "page": 2, "track": 4 },
+    "event_name_count": { "Listing Viewed": 3, "Filter Applied": 1 },
+    "last_seen": "2026-05-07T08:00:20.000Z",
+    "has_error_event": false,
+    "idle_seconds": 12
+  }
+]

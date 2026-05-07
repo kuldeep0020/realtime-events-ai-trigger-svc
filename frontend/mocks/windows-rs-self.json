@@ -1,0 +1,29 @@
+[
+  {
+    "anonymous_id": "demo-rs-001",
+    "event_count": 2,
+    "event_type_count": { "identify": 1, "track": 1 },
+    "event_name_count": { "Account Created": 1 },
+    "last_seen": "2026-05-07T08:00:03.000Z",
+    "has_error_event": false,
+    "idle_seconds": 0
+  },
+  {
+    "anonymous_id": "demo-rs-001",
+    "event_count": 3,
+    "event_type_count": { "identify": 1, "track": 2 },
+    "event_name_count": { "Account Created": 1, "Source Created": 1 },
+    "last_seen": "2026-05-07T08:00:06.000Z",
+    "has_error_event": false,
+    "idle_seconds": 0
+  },
+  {
+    "anonymous_id": "demo-rs-001",
+    "event_count": 4,
+    "event_type_count": { "identify": 1, "track": 3 },
+    "event_name_count": { "Account Created": 1, "Source Created": 1, "Destination Setup Error": 1 },
+    "last_seen": "2026-05-07T08:00:10.000Z",
+    "has_error_event": true,
+    "idle_seconds": 0
+  }
+]

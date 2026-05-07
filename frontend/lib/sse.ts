@@ -20,6 +20,8 @@ import eventsRealestate from "@/mocks/events-realestate.json";
 import eventsRsSelf from "@/mocks/events-rs-self.json";
 import triggerRealestate from "@/mocks/trigger-realestate.json";
 import triggerRsSelf from "@/mocks/trigger-rs-self.json";
+import windowsRealestate from "@/mocks/windows-realestate.json";
+import windowsRsSelf from "@/mocks/windows-rs-self.json";
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
 const isMockMode = BASE === "";
@@ -43,7 +45,7 @@ export type SSEMessageHandler = (message: SSEMessage) => void;
 const MOCK_SEQUENCES: Partial<Record<StreamName, unknown[]>> = {
   events: [...eventsRealestate, ...eventsRsSelf],
   triggers: [triggerRealestate, triggerRsSelf],
-  windows: [],
+  windows: [...windowsRealestate, ...windowsRsSelf],
   mock_emails: [],
 };
 
