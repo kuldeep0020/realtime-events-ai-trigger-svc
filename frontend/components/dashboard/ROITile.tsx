@@ -12,7 +12,7 @@
  * Empty state: "Fire a script to see live impact"
  */
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useSSEStream } from "@/lib/sse";
 import { Card } from "@/components/ui/card";
 import type { SSETriggerPayload } from "@/types/api";
@@ -80,16 +80,20 @@ interface ROIState {
 
 export function ROITile() {
   const [roi, setRoi] = useState<ROIState>({ triggerCount: 0, totalRevenue: 0 });
+  const seenIds = useRef<Set<string>>(new Set());
 
   const onMessage = useCallback(
     (msg: { event?: string; data: unknown }) => {
       if (msg.event === "reset") {
+        seenIds.current.clear();
         setRoi({ triggerCount: 0, totalRevenue: 0 });
         return;
       }
       if (msg.event === "triggers" || msg.event === undefined) {
         const payload = msg.data as SSETriggerPayload;
         if (!payload?.id) return;
+        if (seenIds.current.has(payload.id)) return;
+        seenIds.current.add(payload.id);
 
         setRoi((prev) => {
           let additional = 0;

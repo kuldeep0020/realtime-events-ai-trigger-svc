@@ -23,6 +23,7 @@ import type { SSETriggerPayload } from "@/types/api";
 
 const CYCLE_INTERVAL_MS = 4_000;
 const LINGER_MS = 12_000;
+const MAX_QUEUE = 5;
 
 // ─── Variant helpers ──────────────────────────────────────────────────────────
 
@@ -133,7 +134,11 @@ export function OutcomeBanner() {
         if (!payload?.id) return;
         setQueue((prev) => {
           if (prev.some((q) => q.key === payload.id)) return prev;
-          return [...prev, { key: payload.id, payload }];
+          const next = [...prev, { key: payload.id, payload }];
+          // Cap at MAX_QUEUE by dropping the oldest entry; the useEffect
+          // that depends on queue.length already clamps currentIndex via
+          // Math.min(prev, queue.length - 1), so no extra clamp needed here.
+          return next.length > MAX_QUEUE ? next.slice(next.length - MAX_QUEUE) : next;
         });
       }
     },
