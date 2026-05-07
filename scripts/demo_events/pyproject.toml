@@ -1,0 +1,15 @@
+[project]
+name = "demo-events"
+version = "0.1.0"
+description = "Rich RudderStack event publisher for local demo / soak testing"
+requires-python = ">=3.11"
+dependencies = [
+    "pulsar-client>=3.5.0",
+    "faker>=27.0.0",
+]
+
+[dependency-groups]
+dev = ["pytest>=8.0.0"]
+
+[tool.uv]
+dev-dependencies = []

@@ -19,3 +19,9 @@ coverage.html
 
 # macOS
 .DS_Store
+
+# Python (scripts/demo_events)
+**/.venv/
+**/__pycache__/
+**/.pytest_cache/
+**/*.pyc
