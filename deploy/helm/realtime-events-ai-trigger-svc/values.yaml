@@ -1,9 +1,22 @@
 image:
   repository: hub.dev-rudder.rudderlabs.com/kuldeep/realtime-events-ai-trigger-svc
-  tag: "0.1.0"
-  pullPolicy: IfNotPresent
+  tag: "latest"
+  pullPolicy: Always
 
 replicaCount: 1
+
+# Schedule on ARM nodes when using linux/arm64 images.
+nodeSelector:
+  karpenter.sh/nodepool: "arm"
+
+tolerations:
+  - key: type
+    operator: Equal
+    value: "arm"
+    effect: NoSchedule
+
+jobMigrate:
+  enabled: true
 
 env:
   PULSAR_URL: "pulsar+ssl://pc-0148c683.aws-use1-prod-3u4fn.aws.snio.cloud:6651"

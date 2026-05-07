@@ -1,3 +1,4 @@
+{{- if .Values.jobMigrate.enabled }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -7,7 +8,7 @@ metadata:
   annotations:
     "helm.sh/hook": post-install,post-upgrade
     "helm.sh/hook-weight": "-5"
-    "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+    "helm.sh/hook-delete-policy": before-hook-creation
 spec:
   backoffLimit: 3
   template:
@@ -16,11 +17,15 @@ spec:
         {{- include "realtime-events-ai-trigger-svc.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: migrate
     spec:
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       restartPolicy: OnFailure
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 65532
-        runAsGroup: 65532
       containers:
         - name: migrate
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -31,3 +36,4 @@ spec:
               value: {{ .Values.env.POSTGRES_DSN | quote }}
             - name: LOG_LEVEL
               value: {{ .Values.env.LOG_LEVEL | quote }}
+{{- end }}

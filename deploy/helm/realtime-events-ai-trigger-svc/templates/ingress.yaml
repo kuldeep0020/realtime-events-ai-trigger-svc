@@ -5,6 +5,10 @@ metadata:
   name: {{ include "realtime-events-ai-trigger-svc.fullname" . }}
   labels:
     {{- include "realtime-events-ai-trigger-svc.labels" . | nindent 4 }}
+{{ if .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml .Values.ingress.annotations | nindent 4 }}
+{{- end }}
 spec:
   {{- if .Values.ingress.tls }}
   tls:

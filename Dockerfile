@@ -18,9 +18,11 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
 FROM gcr.io/distroless/static:nonroot
 
 COPY --from=builder /out/realtime-trigger /realtime-trigger
+COPY  migrations/ migrations/
 
 LABEL org.opencontainers.image.title="realtime-events-ai-trigger-svc"
 
 USER nonroot:nonroot
 
-ENTRYPOINT ["/realtime-trigger", "serve"]
+ENTRYPOINT ["/realtime-trigger"]
+CMD ["serve"]
