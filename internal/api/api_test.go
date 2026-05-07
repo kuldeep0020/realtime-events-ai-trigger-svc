@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -211,6 +212,134 @@ func TestFireScript_Stub(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "stub") {
 		t.Errorf("expected stub marker, got %s", rec.Body.String())
+	}
+}
+
+// newTestServerWithFireScript builds a Server wired with a mock FireScript
+// callback that tracks calls and returns the configured result.
+func newTestServerWithFireScript(t *testing.T, fn FireScriptFunc) *Server {
+	t.Helper()
+	seed := NewMapSeedFS(map[string][]byte{
+		"persona-configs/realestate.yaml": []byte("persona: realestate\nrules: []\n"),
+		"persona-configs/rs-self.yaml":    []byte("persona: rs-self\nrules: []\n"),
+	})
+	srv := New(Config{
+		Pool:       nil,
+		Hub:        sse.NewHub(sse.WithHeartbeatInterval(20 * time.Millisecond)),
+		Seed:       seed,
+		FireScript: fn,
+	})
+	t.Cleanup(func() { _ = srv.hub.Close(context.Background()) })
+	return srv
+}
+
+func TestFireScript_ValidCountAndSpeed(t *testing.T) {
+	t.Parallel()
+
+	var lastPersona string
+	var lastCount int
+	var lastSpeed float64
+
+	srv := newTestServerWithFireScript(t, func(_ context.Context, persona string, count int, speed float64) (int, error) {
+		lastPersona = persona
+		lastCount = count
+		lastSpeed = speed
+		return count * 3, nil // simulate 3 events per session
+	})
+
+	body := bytes.NewBufferString(`{"persona":"realestate","count":2,"speed":0.5}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/demo/fire-script", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if lastPersona != "realestate" {
+		t.Errorf("persona=%q, want realestate", lastPersona)
+	}
+	if lastCount != 2 {
+		t.Errorf("count=%d, want 2", lastCount)
+	}
+	if lastSpeed != 0.5 {
+		t.Errorf("speed=%v, want 0.5", lastSpeed)
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if resp["count"].(float64) != 2 {
+		t.Errorf("response count=%v, want 2", resp["count"])
+	}
+	if resp["speed"].(float64) != 0.5 {
+		t.Errorf("response speed=%v, want 0.5", resp["speed"])
+	}
+}
+
+func TestFireScript_DefaultCountAndSpeed(t *testing.T) {
+	t.Parallel()
+
+	var lastCount int
+	var lastSpeed float64
+
+	srv := newTestServerWithFireScript(t, func(_ context.Context, _ string, count int, speed float64) (int, error) {
+		lastCount = count
+		lastSpeed = speed
+		return 5, nil
+	})
+
+	body := bytes.NewBufferString(`{"persona":"realestate"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/demo/fire-script", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if lastCount != 1 {
+		t.Errorf("default count=%d, want 1", lastCount)
+	}
+	if lastSpeed != 1.0 {
+		t.Errorf("default speed=%v, want 1.0", lastSpeed)
+	}
+}
+
+func TestFireScript_InvalidCount(t *testing.T) {
+	t.Parallel()
+	srv := newTestServerWithFireScript(t, func(_ context.Context, _ string, _ int, _ float64) (int, error) {
+		return 0, nil
+	})
+
+	for _, badCount := range []int{0, 4, 10, -1} {
+		body := bytes.NewBufferString(`{"persona":"realestate","count":` + strconv.Itoa(badCount) + `,"speed":1.0}`)
+		req := httptest.NewRequest(http.MethodPost, "/api/demo/fire-script", body)
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("count=%d: expected 400, got %d body=%s", badCount, rec.Code, rec.Body.String())
+		}
+	}
+}
+
+func TestFireScript_InvalidSpeed(t *testing.T) {
+	t.Parallel()
+	srv := newTestServerWithFireScript(t, func(_ context.Context, _ string, _ int, _ float64) (int, error) {
+		return 0, nil
+	})
+
+	for _, badSpeed := range []string{"1.5", "3.0", "0.1", "0.0"} {
+		body := bytes.NewBufferString(`{"persona":"realestate","count":1,"speed":` + badSpeed + `}`)
+		req := httptest.NewRequest(http.MethodPost, "/api/demo/fire-script", body)
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("speed=%s: expected 400, got %d body=%s", badSpeed, rec.Code, rec.Body.String())
+		}
 	}
 }
 

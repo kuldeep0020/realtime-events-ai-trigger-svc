@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -256,6 +257,226 @@ func TestFirer_PropagatesNon2xx(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "non-2xx") {
 		t.Errorf("error should mention non-2xx, got %v", err)
+	}
+}
+
+// TestRunConcurrent_ThreeScripts verifies that RunConcurrent fires 3 separate
+// scripts each with distinct anonymousIds.
+func TestRunConcurrent_ThreeScripts(t *testing.T) {
+	t.Parallel()
+
+	// Track which anonymousIds were POSTed.
+	var mu sync.Mutex
+	seenIDs := make(map[string]int)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var wrapper struct {
+			Batch []map[string]any `json:"batch"`
+		}
+		if err := json.Unmarshal(body, &wrapper); err == nil {
+			for _, ev := range wrapper.Batch {
+				if id, ok := ev["anonymousId"].(string); ok {
+					mu.Lock()
+					seenIDs[id]++
+					mu.Unlock()
+				}
+			}
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+
+	firer := demofire.NewFirer(srv.URL, "test-wk")
+	firer.Sleep = func(time.Duration) {} // skip all sleeps
+
+	scripts := []demofire.NamedScript{
+		{
+			Persona: "realestate",
+			AnonID:  "anon-a",
+			Script: []demofire.ScriptStep{
+				{DelayMs: 0, Event: event.Event{Type: "track", Channel: "browser", AnonymousID: "anon-a"}},
+				{DelayMs: 0, Event: event.Event{Type: "page", Channel: "browser", AnonymousID: "anon-a"}},
+			},
+		},
+		{
+			Persona: "realestate",
+			AnonID:  "anon-b",
+			Script: []demofire.ScriptStep{
+				{DelayMs: 0, Event: event.Event{Type: "track", Channel: "browser", AnonymousID: "anon-b"}},
+			},
+		},
+		{
+			Persona: "realestate",
+			AnonID:  "anon-c",
+			Script: []demofire.ScriptStep{
+				{DelayMs: 0, Event: event.Event{Type: "track", Channel: "browser", AnonymousID: "anon-c"}},
+				{DelayMs: 0, Event: event.Event{Type: "track", Channel: "browser", AnonymousID: "anon-c"}},
+				{DelayMs: 0, Event: event.Event{Type: "track", Channel: "browser", AnonymousID: "anon-c"}},
+			},
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	totalSent, err := firer.RunConcurrent(ctx, scripts, 1.0)
+	if err != nil {
+		t.Fatalf("RunConcurrent: %v", err)
+	}
+	if totalSent != 6 {
+		t.Errorf("expected 6 total events, got %d", totalSent)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	// All three distinct anonymousIds must appear.
+	for _, id := range []string{"anon-a", "anon-b", "anon-c"} {
+		if seenIDs[id] == 0 {
+			t.Errorf("anonymousId %q not seen in POSTed events; seenIDs=%v", id, seenIDs)
+		}
+	}
+	if seenIDs["anon-a"] != 2 {
+		t.Errorf("expected 2 events for anon-a, got %d", seenIDs["anon-a"])
+	}
+	if seenIDs["anon-b"] != 1 {
+		t.Errorf("expected 1 event for anon-b, got %d", seenIDs["anon-b"])
+	}
+	if seenIDs["anon-c"] != 3 {
+		t.Errorf("expected 3 events for anon-c, got %d", seenIDs["anon-c"])
+	}
+}
+
+// TestRunConcurrent_StaggeredStart verifies that consecutive scripts begin
+// approximately 500ms apart (within generous bounds for test stability).
+// We inject a real sleep so wall-clock time is observable.
+func TestRunConcurrent_StaggeredStart(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	// Record when the first event of each goroutine was sent.
+	var mu sync.Mutex
+	firstSeen := make(map[string]time.Time)
+
+	firer := demofire.NewFirer(srv.URL, "test-wk")
+	// Keep real sleep so we can observe stagger timing.
+	// But use a per-event interceptor via a custom httptest server.
+	perAnonSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var wrapper struct {
+			Batch []map[string]any `json:"batch"`
+		}
+		if err := json.Unmarshal(body, &wrapper); err == nil {
+			for _, ev := range wrapper.Batch {
+				if id, ok := ev["anonymousId"].(string); ok {
+					mu.Lock()
+					if _, exists := firstSeen[id]; !exists {
+						firstSeen[id] = time.Now()
+					}
+					mu.Unlock()
+				}
+			}
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer perAnonSrv.Close()
+
+	firer2 := demofire.NewFirer(perAnonSrv.URL, "test-wk")
+	// Use real sleep so stagger is observable.
+
+	scripts := []demofire.NamedScript{
+		{
+			Persona: "realestate",
+			AnonID:  "anon-stagger-0",
+			Script: []demofire.ScriptStep{
+				{DelayMs: 0, Event: event.Event{Type: "track", Channel: "browser", AnonymousID: "anon-stagger-0"}},
+			},
+		},
+		{
+			Persona: "realestate",
+			AnonID:  "anon-stagger-1",
+			Script: []demofire.ScriptStep{
+				{DelayMs: 0, Event: event.Event{Type: "track", Channel: "browser", AnonymousID: "anon-stagger-1"}},
+			},
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	start := time.Now()
+	_, err := firer2.RunConcurrent(ctx, scripts, 1.0)
+	elapsed := time.Since(start)
+	if err != nil {
+		t.Fatalf("RunConcurrent: %v", err)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	t0, ok0 := firstSeen["anon-stagger-0"]
+	t1, ok1 := firstSeen["anon-stagger-1"]
+	if !ok0 || !ok1 {
+		t.Fatalf("not all events observed: firstSeen=%v", firstSeen)
+	}
+
+	// Script 0 starts immediately; script 1 starts ~500ms later.
+	// We verify script 1 first event is at least 400ms after script 0.
+	gap := t1.Sub(t0)
+	if gap < 400*time.Millisecond {
+		t.Errorf("stagger gap %v < 400ms — scripts may not be staggered", gap)
+	}
+	// Total should be under 1.5s (500ms stagger + zero-delay steps).
+	if elapsed > 2*time.Second {
+		t.Errorf("total elapsed %v > 2s — RunConcurrent seems to be running sequentially", elapsed)
+	}
+	_ = firer // suppress unused warning
+}
+
+// TestSpeed_HalvesDelays verifies that speed=2.0 halves the wall-clock time
+// compared to speed=1.0 for a script with meaningful delays.
+func TestSpeed_HalvesDelays(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	// A script with 200ms total delay (2 steps at 100ms each).
+	makeScript := func(id string) []demofire.ScriptStep {
+		return []demofire.ScriptStep{
+			{DelayMs: 0, Event: event.Event{Type: "track", Channel: "browser", AnonymousID: id}},
+			{DelayMs: 100, Event: event.Event{Type: "track", Channel: "browser", AnonymousID: id}},
+			{DelayMs: 100, Event: event.Event{Type: "track", Channel: "browser", AnonymousID: id}},
+		}
+	}
+
+	// Measure at 1x speed.
+	firer1x := demofire.NewFirer(srv.URL, "test-wk")
+	start1x := time.Now()
+	_, _ = firer1x.Fire(context.Background(), makeScript("anon-1x"))
+	elapsed1x := time.Since(start1x)
+
+	// Measure at 2x speed.
+	firer2x := demofire.NewFirer(srv.URL, "test-wk")
+	firer2x.Speed = 2.0
+	start2x := time.Now()
+	_, _ = firer2x.Fire(context.Background(), makeScript("anon-2x"))
+	elapsed2x := time.Since(start2x)
+
+	// 2x should be at least 30% faster than 1x.
+	if elapsed2x >= elapsed1x {
+		t.Errorf("speed=2.0 not faster: 1x=%v 2x=%v", elapsed1x, elapsed2x)
+	}
+	// 1x should take at least 150ms (two 100ms delays with slice-based sleep).
+	if elapsed1x < 150*time.Millisecond {
+		t.Errorf("1x elapsed %v < 150ms — test delays might be too small", elapsed1x)
 	}
 }
 

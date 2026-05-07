@@ -10,12 +10,22 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/samber/oops"
 
 	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/event"
 )
+
+// NamedScript pairs a persona label with a pre-built script and the
+// anonymousId that script fires under. Used by RunConcurrent.
+type NamedScript struct {
+	Persona string
+	Script  []ScriptStep
+	AnonID  string
+}
 
 // Firer POSTs persona-specific browser-channel event sequences to the
 // RudderStack ingestion service.
@@ -27,6 +37,7 @@ import (
 //   - HTTPClient:   optional override for tests; defaults to a 10s-timeout client
 //   - Logger:       optional; defaults to slog.Default()
 //   - Sleep:        optional clock-injection hook for tests; defaults to time.Sleep
+//   - Speed:        playback multiplier; 1.0 = real-time, 2.0 = double speed, 0.5 = half speed.
 //
 // Concurrency: a Firer is safe to use sequentially; running two Fire calls
 // against the same Firer concurrently is permitted but the underlying HTTP
@@ -39,6 +50,10 @@ type Firer struct {
 	// Sleep is invoked between steps with the relative delay. Defaults to
 	// time.Sleep. Test code injects a no-op or a deterministic mock.
 	Sleep func(time.Duration)
+	// Speed is a playback multiplier applied to all DelayMs values.
+	// 1.0 = real-time (default), 2.0 = halves delays, 0.5 = doubles delays.
+	// Values <= 0 are treated as 1.0.
+	Speed float64
 }
 
 // NewFirer constructs a Firer with sensible defaults. Both IngestionURL
@@ -51,7 +66,16 @@ func NewFirer(ingestionURL, writeKey string) *Firer {
 		HTTPClient:   &http.Client{Timeout: 10 * time.Second},
 		Logger:       slog.Default(),
 		Sleep:        time.Sleep,
+		Speed:        1.0,
 	}
+}
+
+// speedOrOne returns f.Speed if it is positive, otherwise 1.0.
+func (f *Firer) speedOrOne() float64 {
+	if f.Speed <= 0 {
+		return 1.0
+	}
+	return f.Speed
 }
 
 // Fire walks the provided script, sleeping for each step's DelayMs before
@@ -81,6 +105,7 @@ func (f *Firer) Fire(ctx context.Context, script []ScriptStep) (int, error) {
 		f.Sleep = time.Sleep
 	}
 
+	speed := f.speedOrOne()
 	endpoint := f.IngestionURL + "/v1/batch"
 	authHeader := basicAuth(f.WriteKey, "")
 
@@ -90,7 +115,8 @@ func (f *Firer) Fire(ctx context.Context, script []ScriptStep) (int, error) {
 			return sent, oops.Wrapf(err, "Fire: cancelled before step %d", i)
 		}
 		if step.DelayMs > 0 {
-			if err := sleepWithCtx(ctx, f.Sleep, time.Duration(step.DelayMs)*time.Millisecond); err != nil {
+			actualDelay := time.Duration(float64(step.DelayMs)*(1.0/speed)) * time.Millisecond
+			if err := sleepWithCtx(ctx, f.Sleep, actualDelay); err != nil {
 				return sent, oops.Wrapf(err, "Fire: cancelled during delay before step %d", i)
 			}
 		}
@@ -119,6 +145,90 @@ func (f *Firer) Fire(ctx context.Context, script []ScriptStep) (int, error) {
 		)
 	}
 	return sent, nil
+}
+
+// RunConcurrent fires multiple named scripts in parallel goroutines.
+// Each goroutine is staggered by 500ms × its index offset so the dashboard
+// SSE feed shows scripts spinning up in sequence rather than racing in
+// lockstep.
+//
+// Speed applies to all scripts. The first error encountered is returned after
+// all goroutines have drained (to avoid leaks). Total sent is the sum across
+// all goroutines.
+func (f *Firer) RunConcurrent(ctx context.Context, scripts []NamedScript, speed float64) (int, error) {
+	if len(scripts) == 0 {
+		return 0, nil
+	}
+	if f.HTTPClient == nil {
+		f.HTTPClient = &http.Client{Timeout: 10 * time.Second}
+	}
+	if f.Logger == nil {
+		f.Logger = slog.Default()
+	}
+	if f.Sleep == nil {
+		f.Sleep = time.Sleep
+	}
+
+	// Build a per-goroutine firer that inherits all settings but uses the
+	// supplied speed. We share the HTTP client (goroutine-safe).
+	effectiveSpeed := speed
+	if effectiveSpeed <= 0 {
+		effectiveSpeed = 1.0
+	}
+
+	var (
+		totalSent atomic.Int64
+		firstErr  error
+		mu        sync.Mutex
+		wg        sync.WaitGroup
+	)
+
+	for i, ns := range scripts {
+		i, ns := i, ns // capture loop vars
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			// Stagger start: 500ms × index (scaled by speed)
+			staggerDelay := time.Duration(float64(500*i)*(1.0/effectiveSpeed)) * time.Millisecond
+			if staggerDelay > 0 {
+				if err := sleepWithCtx(ctx, f.Sleep, staggerDelay); err != nil {
+					// ctx cancelled during stagger — record error but don't abort yet
+					mu.Lock()
+					if firstErr == nil {
+						firstErr = oops.Wrapf(err, "RunConcurrent: stagger cancelled for script %d (%s)", i, ns.Persona)
+					}
+					mu.Unlock()
+					return
+				}
+			}
+
+			// Create a per-goroutine Firer that shares the HTTP client but has
+			// independent Speed so we don't race on f.Speed.
+			gf := &Firer{
+				IngestionURL: f.IngestionURL,
+				WriteKey:     f.WriteKey,
+				HTTPClient:   f.HTTPClient,
+				Logger:       f.Logger.With("concurrent_script", i, "persona", ns.Persona, "anon_id", ns.AnonID),
+				Sleep:        f.Sleep,
+				Speed:        effectiveSpeed,
+			}
+
+			sent, err := gf.Fire(ctx, ns.Script)
+			totalSent.Add(int64(sent))
+
+			if err != nil {
+				mu.Lock()
+				if firstErr == nil {
+					firstErr = err
+				}
+				mu.Unlock()
+			}
+		}()
+	}
+
+	wg.Wait()
+	return int(totalSent.Load()), firstErr
 }
 
 // postOne sends a single batch body and returns nil on 2xx, error otherwise.

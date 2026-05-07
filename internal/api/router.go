@@ -36,7 +36,10 @@ type SeedFS interface {
 // FireScriptFunc is the optional callback invoked by POST /api/demo/fire-script.
 // Stage 1 ships a 501 stub; stage 3 wiring sets this to a real demo-fire
 // invocation. The function returns the count of events sent.
-type FireScriptFunc func(ctx context.Context, persona string) (int, error)
+//
+// count specifies how many concurrent sessions to fire (1-3); speed is a
+// playback multiplier (0.5, 1.0, or 2.0).
+type FireScriptFunc func(ctx context.Context, persona string, count int, speed float64) (eventsSent int, err error)
 
 // AdminSeedFunc is the optional callback invoked by POST /api/admin/seed.
 // Stage 1 ships a 501 stub; the wired version calls seed.Seeder.LoadAll.

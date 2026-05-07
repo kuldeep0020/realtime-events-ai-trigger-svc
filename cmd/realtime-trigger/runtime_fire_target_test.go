@@ -95,7 +95,7 @@ func TestMakeFireScript_HTTPTarget(t *testing.T) {
 
 	fn := rt.makeFireScript()
 	// "realestate" is a known persona — the script has 8 steps so expect > 0 HTTP calls.
-	count, err := fn(context.Background(), "realestate")
+	count, err := fn(context.Background(), "realestate", 1, 1.0)
 	if err != nil {
 		t.Fatalf("http fire returned error: %v", err)
 	}
@@ -120,7 +120,7 @@ func TestMakeFireScript_HTTPTarget_FailsFastWithEmptyURL(t *testing.T) {
 	}
 
 	fn := rt.makeFireScript()
-	_, err := fn(context.Background(), "realestate")
+	_, err := fn(context.Background(), "realestate", 1, 1.0)
 	if err == nil {
 		t.Fatal("expected error for empty IngestionURL, got nil")
 	}
@@ -251,7 +251,7 @@ func TestMakeFireScript_PulsarTarget_EmptyURLError(t *testing.T) {
 	}
 
 	fn := rt.makeFireScript()
-	_, err := fn(context.Background(), "realestate")
+	_, err := fn(context.Background(), "realestate", 1, 1.0)
 	if err == nil {
 		t.Fatal("expected error when PulsarURL is empty, got nil")
 	}

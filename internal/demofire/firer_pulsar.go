@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/apache/pulsar-client-go/pulsar"
@@ -170,6 +172,89 @@ func (pf *PulsarFirer) Fire(ctx context.Context, script []ScriptStep) (int, erro
 		)
 	}
 	return sent, nil
+}
+
+// RunConcurrent fires multiple named scripts concurrently, each in its own
+// goroutine. Scripts are staggered by 500ms × index to avoid lockstep racing.
+// Speed applies to all scripts. Returns total events sent and the first error.
+// All goroutines drain to completion regardless of errors to avoid leaks.
+func (pf *PulsarFirer) RunConcurrent(ctx context.Context, scripts []NamedScript, speed float64) (int, error) {
+	if len(scripts) == 0 {
+		return 0, nil
+	}
+
+	effectiveSpeed := speed
+	if effectiveSpeed <= 0 {
+		effectiveSpeed = 1.0
+	}
+
+	sleep := pf.Sleep
+	if sleep == nil {
+		sleep = time.Sleep
+	}
+
+	var (
+		totalSent atomic.Int64
+		firstErr  error
+		mu        sync.Mutex
+		wg        sync.WaitGroup
+	)
+
+	for i, ns := range scripts {
+		i, ns := i, ns
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			// Stagger start: 500ms × index (scaled by speed)
+			staggerDelay := time.Duration(float64(500*i)*(1.0/effectiveSpeed)) * time.Millisecond
+			if staggerDelay > 0 {
+				if err := sleepWithCtx(ctx, sleep, staggerDelay); err != nil {
+					mu.Lock()
+					if firstErr == nil {
+						firstErr = oops.Wrapf(err, "RunConcurrent: stagger cancelled for script %d (%s)", i, ns.Persona)
+					}
+					mu.Unlock()
+					return
+				}
+			}
+
+			// Build a scaled script by adjusting DelayMs according to speed.
+			scaledScript := make([]ScriptStep, len(ns.Script))
+			for j, step := range ns.Script {
+				scaledScript[j] = ScriptStep{
+					DelayMs: int(float64(step.DelayMs) * (1.0 / effectiveSpeed)),
+					Event:   step.Event,
+				}
+			}
+
+			// Use a per-goroutine copy of the PulsarFirer (same config, own logger).
+			gpf := &PulsarFirer{
+				cfg:         pf.cfg,
+				Logger:      pf.Logger.With("concurrent_script", i, "persona", ns.Persona, "anon_id", ns.AnonID),
+				Sleep:       sleep,
+				newClient:   pf.newClient,
+				newProducer: pf.newProducer,
+			}
+
+			// Fire with DelayMs=0 since we pre-scaled above by setting the step delays.
+			// Actually, pass the original script and rely on the Firer's own speed logic
+			// by using a regular Fire call without speed (we pre-scaled the delays).
+			sent, err := gpf.Fire(ctx, scaledScript)
+			totalSent.Add(int64(sent))
+
+			if err != nil {
+				mu.Lock()
+				if firstErr == nil {
+					firstErr = err
+				}
+				mu.Unlock()
+			}
+		}()
+	}
+
+	wg.Wait()
+	return int(totalSent.Load()), firstErr
 }
 
 // validate returns an error if required config fields are missing.

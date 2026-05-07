@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -12,14 +13,20 @@ import (
 	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/sse"
 )
 
-// fireScriptRequest carries the persona to fire. Body schema is small so
-// we accept it via either JSON body or query string for ergonomics.
+// fireScriptRequest carries the persona to fire along with optional count and
+// speed overrides. Pointer fields distinguish "absent" (nil = use default)
+// from "explicitly set" so validation applies only when a value is provided.
 type fireScriptRequest struct {
-	Persona string `json:"persona"`
+	Persona string   `json:"persona"`
+	Count   *int     `json:"count"`
+	Speed   *float64 `json:"speed"`
 }
 
 // handleFireScript invokes the configured FireScript callback for the
 // requested persona. Returns 501 when no callback is wired (stage 1 stub).
+//
+// Accepts count (1-3) and speed (0.5, 1.0, 2.0) via JSON body or query
+// params. Defaults: count=1, speed=1.0.
 //
 // The handler runs Fire in a fresh context derived from a server-side
 // timeout — NOT r.Context() — because the demo script outlives the HTTP
@@ -36,22 +43,36 @@ func (s *Server) handleFireScript(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	persona := strings.TrimSpace(r.URL.Query().Get("persona"))
-	if persona == "" {
-		// Accept JSON body as fallback.
-		var req fireScriptRequest
-		if r.Body != nil && r.ContentLength != 0 {
-			if !decodeJSON(w, r, &req) {
-				return
-			}
-			persona = strings.TrimSpace(req.Persona)
+	var req fireScriptRequest
+
+	// Prefer JSON body; fall back to query params.
+	if r.Body != nil && r.ContentLength != 0 {
+		if !decodeJSON(w, r, &req) {
+			return
 		}
 	}
+
+	// Query params override body (for curl ergonomics).
+	if q := strings.TrimSpace(r.URL.Query().Get("persona")); q != "" {
+		req.Persona = q
+	}
+	if q := r.URL.Query().Get("count"); q != "" {
+		if n, err := strconv.Atoi(q); err == nil {
+			req.Count = &n
+		}
+	}
+	if q := r.URL.Query().Get("speed"); q != "" {
+		if sv, err := strconv.ParseFloat(q, 64); err == nil {
+			req.Speed = &sv
+		}
+	}
+
+	// Validate persona.
+	persona := strings.ToLower(strings.TrimSpace(req.Persona))
 	if persona == "" {
 		writeError(w, http.StatusBadRequest, "persona is required (query string or JSON body)")
 		return
 	}
-	persona = strings.ToLower(persona)
 	if persona == "rsself" || persona == "rs_self" {
 		persona = "rs-self"
 	}
@@ -60,20 +81,49 @@ func (s *Server) handleFireScript(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Apply defaults and validate count.
+	count := 1
+	if req.Count != nil {
+		count = *req.Count
+	}
+	if count < 1 || count > 3 {
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"error": "count must be 1, 2, or 3",
+			"got":   count,
+		})
+		return
+	}
+
+	// Apply defaults and validate speed.
+	speed := 1.0
+	if req.Speed != nil {
+		speed = *req.Speed
+	}
+	validSpeed := speed == 0.5 || speed == 1.0 || speed == 2.0
+	if !validSpeed {
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"error": "speed must be 0.5, 1.0, or 2.0",
+			"got":   speed,
+		})
+		return
+	}
+
 	// Detached context: the demo script is ~32 seconds; we don't want a
 	// browser disconnect to abort it. We respect a max wall-clock cap so
 	// runaway invocations don't leak goroutines.
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 
-	count, err := s.fireScript(ctx, persona)
+	eventsSent, err := s.fireScript(ctx, persona, count, speed)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "fire-script failed: "+err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"persona":     persona,
-		"event_count": count,
+		"event_count": eventsSent,
+		"count":       count,
+		"speed":       speed,
 		"status":      "fired",
 	})
 }
