@@ -406,6 +406,102 @@ func TestPulsarFirer_CtxCancelStopsPublish(t *testing.T) {
 	}
 }
 
+// TestPulsarFirer_RestampsTimestampsPerStep verifies the Bug-1a fix: the firer
+// must write a fresh time.Now() into ev.OriginalTimestamp (and SentAt) on each
+// step, and must NOT mutate the original script slice elements.
+//
+// Assertions:
+//  1. All 3 OriginalTimestamps are non-zero (firer stamped them).
+//  2. All 3 OriginalTimestamps are distinct (each step gets its own time.Now()).
+//  3. The timestamps are monotonically non-decreasing (later steps ≥ earlier steps).
+//  4. The original script[i].Event.OriginalTimestamp is still zero (firer did not
+//     mutate the slice — slice-mutation regression guard).
+//  5. SentAt equals OriginalTimestamp for each message.
+func TestPulsarFirer_RestampsTimestampsPerStep(t *testing.T) {
+	t.Parallel()
+
+	// Build a 3-step script with explicitly zero OriginalTimestamp so we can
+	// detect whether the firer wrote a real value.
+	script := []demofire.ScriptStep{
+		{DelayMs: 1, Event: event.Event{Type: "identify", Channel: "browser", AnonymousID: "anon-restamp-001", MessageID: "rs-m0"}},
+		{DelayMs: 1, Event: event.Event{Type: "page", Channel: "browser", AnonymousID: "anon-restamp-001", MessageID: "rs-m1"}},
+		{DelayMs: 1, Event: event.Event{Type: "track", Channel: "browser", Event: "Restamp Test", AnonymousID: "anon-restamp-001", MessageID: "rs-m2"}},
+	}
+	// Confirm zero-value precondition so assertion 4 is meaningful.
+	for i, s := range script {
+		if !s.Event.OriginalTimestamp.IsZero() {
+			t.Fatalf("precondition: script[%d].Event.OriginalTimestamp is not zero", i)
+		}
+	}
+
+	fp := &fakePulsarProducer{}
+	firer := newTestPulsarFirer(fp, defaultCfg())
+	// Use real sleep (1ms per step) so time.Now() advances between sends,
+	// giving us strictly increasing timestamps to assert on.
+
+	ctx := context.Background()
+	count, err := firer.Fire(ctx, script)
+	if err != nil {
+		t.Fatalf("Fire returned unexpected error: %v", err)
+	}
+	if count != 3 {
+		t.Fatalf("sent count: want 3, got %d", count)
+	}
+
+	msgs := fp.sent()
+	if len(msgs) != 3 {
+		t.Fatalf("expected 3 captured messages, got %d", len(msgs))
+	}
+
+	// Decode each payload and collect OriginalTimestamp / SentAt.
+	type stamped struct {
+		OriginalTimestamp time.Time `json:"originalTimestamp"`
+		SentAt            time.Time `json:"sentAt"`
+	}
+	timestamps := make([]stamped, 3)
+	for i, m := range msgs {
+		var s stamped
+		if err := json.Unmarshal(m.payload, &s); err != nil {
+			t.Fatalf("step %d: failed to decode payload: %v", i, err)
+		}
+		timestamps[i] = s
+	}
+
+	for i, ts := range timestamps {
+		// Assertion 1: non-zero.
+		if ts.OriginalTimestamp.IsZero() {
+			t.Errorf("step %d: OriginalTimestamp is zero — firer did not stamp it", i)
+		}
+		// Assertion 5: SentAt == OriginalTimestamp.
+		if !ts.SentAt.Equal(ts.OriginalTimestamp) {
+			t.Errorf("step %d: SentAt=%v != OriginalTimestamp=%v", i, ts.SentAt, ts.OriginalTimestamp)
+		}
+	}
+
+	// Assertion 2: all 3 timestamps are distinct.
+	if timestamps[0].OriginalTimestamp.Equal(timestamps[1].OriginalTimestamp) {
+		t.Errorf("steps 0 and 1 have the same OriginalTimestamp (%v) — expected distinct per-step stamps", timestamps[0].OriginalTimestamp)
+	}
+	if timestamps[1].OriginalTimestamp.Equal(timestamps[2].OriginalTimestamp) {
+		t.Errorf("steps 1 and 2 have the same OriginalTimestamp (%v) — expected distinct per-step stamps", timestamps[1].OriginalTimestamp)
+	}
+
+	// Assertion 3: monotonically non-decreasing.
+	if timestamps[1].OriginalTimestamp.Before(timestamps[0].OriginalTimestamp) {
+		t.Errorf("step 1 timestamp %v is before step 0 timestamp %v — not monotonic", timestamps[1].OriginalTimestamp, timestamps[0].OriginalTimestamp)
+	}
+	if timestamps[2].OriginalTimestamp.Before(timestamps[1].OriginalTimestamp) {
+		t.Errorf("step 2 timestamp %v is before step 1 timestamp %v — not monotonic", timestamps[2].OriginalTimestamp, timestamps[1].OriginalTimestamp)
+	}
+
+	// Assertion 4: original script slice elements are unchanged (zero).
+	for i, s := range script {
+		if !s.Event.OriginalTimestamp.IsZero() {
+			t.Errorf("step %d: firer mutated script[i].Event.OriginalTimestamp (got %v, want zero)", i, s.Event.OriginalTimestamp)
+		}
+	}
+}
+
 // TestPulsarFirer_SourceIDDefaultsToWriteKey verifies that when SourceID is
 // empty in config, the property["sourceId"] value equals WriteKey.
 func TestPulsarFirer_SourceIDDefaultsToWriteKey(t *testing.T) {

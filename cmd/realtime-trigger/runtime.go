@@ -83,6 +83,10 @@ func (rt *runtime) adminSeedHandler(fs api.SeedFS) api.AdminSeedFunc {
 // UserWindow in the sharded store. Both are required so a second demo run
 // after a reset produces identical trigger fires.
 //
+// After purging, it publishes a "reset" SSE event on all four streams so
+// connected dashboard clients clear their React state immediately without
+// waiting for a page reload.
+//
 // The returned counts are forwarded to the HTTP response for operator visibility.
 func (rt *runtime) OnDemoReset(_ context.Context) (cooldownsCleared, windowsCleared int, err error) {
 	cooldownsCleared = rt.engine.PurgeCooldowns()
@@ -90,6 +94,23 @@ func (rt *runtime) OnDemoReset(_ context.Context) (cooldownsCleared, windowsClea
 	rt.log.Info("demo reset: in-memory state purged",
 		"cooldowns_cleared", cooldownsCleared,
 		"windows_cleared", windowsCleared)
+
+	// Signal connected dashboard clients to clear their local React state.
+	if rt.hub != nil {
+		resetMsg := sse.Message{
+			Event: sse.EventReset,
+			Data:  map[string]any{"at": time.Now().UTC()},
+		}
+		for _, stream := range []string{
+			sse.StreamEvents,
+			sse.StreamWindows,
+			sse.StreamTriggers,
+			sse.StreamMockEmails,
+		} {
+			rt.hub.Publish(stream, resetMsg)
+		}
+	}
+
 	return cooldownsCleared, windowsCleared, nil
 }
 

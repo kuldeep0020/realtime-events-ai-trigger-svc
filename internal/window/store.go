@@ -114,8 +114,11 @@ func (s *Store) WithWindow(anonID string, fn func(*UserWindow)) {
 }
 
 // Update is a convenience wrapper around WithWindow that applies a single
-// event's aggregations. Hot-path callers use this directly.
-func (s *Store) Update(evt *event.Event) {
+// event's aggregations. receivedAt is the server-side wall-clock time the
+// event arrived; it is used as the authoritative time for FirstSeen/LastSeen
+// so idle detection is based on real wall-clock silence, not client timestamps.
+// Pass time.Time{} to fall back to time.Now() inside apply.
+func (s *Store) Update(evt *event.Event, receivedAt time.Time) {
 	if evt == nil {
 		return
 	}
@@ -124,7 +127,7 @@ func (s *Store) Update(evt *event.Event) {
 		return
 	}
 	s.WithWindow(anonID, func(w *UserWindow) {
-		w.apply(evt)
+		w.apply(evt, receivedAt)
 	})
 }
 

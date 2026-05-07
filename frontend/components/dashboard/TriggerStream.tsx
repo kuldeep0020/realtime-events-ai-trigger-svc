@@ -382,6 +382,11 @@ export function TriggerStream({ onTriggerFired }: TriggerStreamProps) {
 
   const onMessage = useCallback(
     (msg: { event?: string; data: unknown }) => {
+      if (msg.event === "reset") {
+        // Server-side demo reset: clear trigger list.
+        setTriggers([]);
+        return;
+      }
       if (msg.event === "triggers" || msg.event === undefined) {
         const payload = msg.data as SSETriggerPayload;
         if (!payload.id) return;

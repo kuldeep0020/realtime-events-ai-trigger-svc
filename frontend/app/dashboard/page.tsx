@@ -19,6 +19,7 @@ import { TriggerStream } from "@/components/dashboard/TriggerStream";
 import { EmailOutbox } from "@/components/dashboard/EmailOutbox";
 import { Controller } from "@/components/demo/Controller";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useSSEStream } from "@/lib/sse";
 import type { Persona } from "@/types/api";
 
 function DashboardContent() {
@@ -32,24 +33,19 @@ function DashboardContent() {
   const [showController, setShowController] = useState(true);
 
   const handleTriggerFired = useCallback((anonymousId: string) => {
-    // Flash the session card and connected events
+    // Mark session card as triggered (persists until reset).
     setTriggeredIds((prev) => {
       const next = new Set(prev);
       next.add(anonymousId);
       return next;
     });
+    // Flash event cards briefly (1.2s), then clear highlight.
     setHighlightedIds((prev) => {
       const next = new Set(prev);
       next.add(anonymousId);
       return next;
     });
-    // Clear after animation completes
     setTimeout(() => {
-      setTriggeredIds((prev) => {
-        const next = new Set(prev);
-        next.delete(anonymousId);
-        return next;
-      });
       setHighlightedIds((prev) => {
         const next = new Set(prev);
         next.delete(anonymousId);
@@ -57,6 +53,16 @@ function DashboardContent() {
       });
     }, 1200);
   }, []);
+
+  // Listen for the server-side demo reset signal on the events stream.
+  // When received, clear page-level triggered/highlighted state so the
+  // next demo run starts with a clean UI.
+  useSSEStream("events", useCallback((msg: { event?: string }) => {
+    if (msg.event === "reset") {
+      setTriggeredIds(new Set());
+      setHighlightedIds(new Set());
+    }
+  }, []));
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-slate-950">

@@ -134,18 +134,26 @@ func (pf *PulsarFirer) Fire(ctx context.Context, script []ScriptStep) (int, erro
 			}
 		}
 
-		payload, err := marshalEvent(step.Event)
+		// Re-stamp the event at actual send time so timestamps are spread
+		// across the real wall-clock duration of the script, not all identical
+		// to the moment the script slice was constructed.
+		ev := step.Event
+		now := time.Now().UTC()
+		ev.OriginalTimestamp = now
+		ev.SentAt = now
+
+		payload, err := marshalEvent(ev)
 		if err != nil {
 			return sent, oops.With("step", i).Wrapf(err, "PulsarFirer.Fire: marshal event")
 		}
 
 		msg := &pulsar.ProducerMessage{
 			Payload: payload,
-			Key:     step.Event.AnonymousID,
+			Key:     ev.AnonymousID,
 			Properties: map[string]string{
 				"writeKey":  pf.cfg.WriteKey,
 				"sourceId":  pf.cfg.SourceID,
-				"messageId": step.Event.MessageID,
+				"messageId": ev.MessageID,
 			},
 		}
 
@@ -154,7 +162,6 @@ func (pf *PulsarFirer) Fire(ctx context.Context, script []ScriptStep) (int, erro
 		}
 
 		sent++
-		ev := step.Event
 		log.Info("demo-fire: step sent",
 			"step", i,
 			"type", ev.Type,

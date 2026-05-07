@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/sse"
 )
 
 // fireScriptRequest carries the persona to fire. Body schema is small so
@@ -187,7 +188,36 @@ func (s *Server) handleReplayLastTrigger(w http.ResponseWriter, r *http.Request)
 	if len(llmParsed) > 0 {
 		out.LLMParsed = llmParsed
 	}
+
+	// Publish to the SSE triggers stream so any subscribed dashboard tab
+	// re-renders the trigger card immediately — without this the "Replay last
+	// trigger" button returns 200 but the Triggers Fired column stays empty.
+	s.hub.Publish(sse.StreamTriggers, replayTriggerSSEMessage(out))
+
 	writeJSON(w, http.StatusOK, out)
+}
+
+// replayTriggerSSEMessage builds the sse.Message for a replayed trigger row,
+// matching the shape emitted by runtime_dispatch.go fireMatch so the
+// frontend TriggerCard component renders it identically.
+//
+// Extracted as a pure function so it can be unit-tested without a Postgres
+// pool or a running hub.
+func replayTriggerSSEMessage(row replayLastTriggerResponse) sse.Message {
+	return sse.Message{
+		Event: sse.StreamTriggers,
+		Data: map[string]any{
+			"id":              row.ID,
+			"rule_name":       row.RuleName,
+			"persona":         row.Persona,
+			"anonymous_id":    row.AnonymousID,
+			"fired_at":        row.FiredAt.UTC().Format(time.RFC3339),
+			"window_snapshot": json.RawMessage(row.WindowSnapshot),
+			"destination":     row.Destination,
+			"dispatch_status": row.DispatchStatus,
+			"llm_parsed":      json.RawMessage(row.LLMParsed),
+		},
+	}
 }
 
 // handleListMockEmails returns the most recent mock_emails rows. Optional

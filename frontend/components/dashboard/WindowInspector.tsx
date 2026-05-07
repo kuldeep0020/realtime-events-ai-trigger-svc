@@ -65,7 +65,11 @@ function SessionCard({ entry, triggered }: SessionCardProps) {
           : {}
       }
       transition={{ duration: 0.8 }}
-      className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2.5 text-xs"
+      className={`rounded-lg border px-3 py-2.5 text-xs ${
+        triggered
+          ? "border-emerald-700 bg-emerald-950/30"
+          : "border-slate-800 bg-slate-900/60"
+      }`}
     >
       <div className="flex items-center gap-2 mb-1.5">
         <span className="font-mono text-slate-200 font-medium">…{anonSuffix}</span>
@@ -75,15 +79,12 @@ function SessionCard({ entry, triggered }: SessionCardProps) {
           </Badge>
         )}
         {triggered && (
-          <motion.span
-            initial={{ scale: 0 }}
-            animate={{ scale: [0, 1.3, 1] }}
-            transition={{ duration: 0.4 }}
-            className="ml-auto text-base"
+          <Badge
+            className="ml-auto bg-emerald-900/60 text-emerald-300 border-emerald-700 text-[10px] px-1.5 py-0"
             aria-label="trigger fired"
           >
-            🎯
-          </motion.span>
+            🎯 trigger fired
+          </Badge>
         )}
       </div>
 
@@ -132,6 +133,11 @@ export function WindowInspector({ triggeredIds = new Set() }: WindowInspectorPro
   const [windows, setWindows] = useState<Map<string, WindowEntry>>(new Map());
 
   const onMessage = useCallback((msg: { event?: string; data: unknown }) => {
+    if (msg.event === "reset") {
+      // Server-side demo reset: clear all session cards.
+      setWindows(new Map());
+      return;
+    }
     if (msg.event === "windows" || msg.event === "window_pruned" || msg.event === undefined) {
       const payload = msg.data as SSEWindowPayload & { pruned?: boolean };
       if (payload.anonymous_id == null) return;

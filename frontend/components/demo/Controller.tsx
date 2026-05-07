@@ -112,9 +112,16 @@ export function Controller({ compact = false, onPersonaChange }: ControllerProps
   const handleReplay = useCallback(async () => {
     try {
       await replayLastTrigger();
-      setStatusMessage("Last trigger replayed");
+      setStatusMessage("Last trigger replayed — see Triggers Fired column");
     } catch (err) {
-      setStatusMessage(`Replay failed: ${err instanceof Error ? err.message : "unknown"}`);
+      const msg = err instanceof Error ? err.message : "unknown";
+      // 404 means no triggers have fired yet — present a friendly hint rather
+      // than a scary "failed" message.
+      if (msg.toLowerCase().includes("no triggers")) {
+        setStatusMessage("No triggers to replay yet — fire a script first");
+      } else {
+        setStatusMessage(`Replay failed: ${msg}`);
+      }
     }
   }, []);
 

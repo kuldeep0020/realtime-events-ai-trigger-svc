@@ -83,33 +83,33 @@ func TestRealEstateSequence(t *testing.T) {
 		MessageID:         "m0",
 		OriginalTimestamp: t0,
 		Traits:            json.RawMessage(`{"membership_tier":"browse"}`),
-	})
+	}, time.Time{})
 
 	// t=2 page /listings
-	s.Update(makeEvent(t, "page", "", anonID, "/listings", nil, t0.Add(2*time.Second)))
+	s.Update(makeEvent(t, "page", "", anonID, "/listings", nil, t0.Add(2*time.Second)), time.Time{})
 
 	// t=5 track Listing Viewed L101
 	s.Update(makeEvent(t, "track", "Listing Viewed", anonID, "/listings",
 		map[string]any{"listing_id": "L101", "suburb": "suburb-1", "price": 1200000.0, "bedrooms": 3, "sq_ft": 2100, "view_count": 50},
-		t0.Add(5*time.Second)))
+		t0.Add(5*time.Second)), time.Time{})
 
 	// t=9 track Filter Applied
 	s.Update(makeEvent(t, "track", "Filter Applied", anonID, "/listings",
 		map[string]any{"beds_min": 3, "price_min": 1000000, "price_max": 1800000, "results_count": 24},
-		t0.Add(9*time.Second)))
+		t0.Add(9*time.Second)), time.Time{})
 
 	// t=13 Listing Viewed L107 (price=1500000 — new max)
 	s.Update(makeEvent(t, "track", "Listing Viewed", anonID, "/listings",
 		map[string]any{"listing_id": "L107", "suburb": "suburb-1", "price": 1500000.0, "bedrooms": 4, "sq_ft": 2400},
-		t0.Add(13*time.Second)))
+		t0.Add(13*time.Second)), time.Time{})
 
 	// t=17 Listing Viewed L112 (price=1350000)
 	s.Update(makeEvent(t, "track", "Listing Viewed", anonID, "/listings",
 		map[string]any{"listing_id": "L112", "suburb": "suburb-1", "price": 1350000.0, "bedrooms": 3, "sq_ft": 2200, "view_count": 125, "listed_days_ago": 4},
-		t0.Add(17*time.Second)))
+		t0.Add(17*time.Second)), time.Time{})
 
 	// t=20 page /listings/L112
-	s.Update(makeEvent(t, "page", "", anonID, "/listings/L112", nil, t0.Add(20*time.Second)))
+	s.Update(makeEvent(t, "page", "", anonID, "/listings/L112", nil, t0.Add(20*time.Second)), time.Time{})
 
 	snap, ok := s.Snapshot(anonID)
 	if !ok {
@@ -178,12 +178,12 @@ func TestRSSelfErrorEvent(t *testing.T) {
 		MessageID:         "m0",
 		OriginalTimestamp: t0,
 		Traits:            json.RawMessage(`{"plan":"free","company":"Acme"}`),
-	})
-	s.Update(makeEvent(t, "track", "Account Created", anonID, "", map[string]any{"plan": "free"}, t0.Add(3*time.Second)))
-	s.Update(makeEvent(t, "track", "Source Created", anonID, "", map[string]any{"source_type": "javascript", "elapsed_seconds_in_setup": 87}, t0.Add(6*time.Second)))
+	}, time.Time{})
+	s.Update(makeEvent(t, "track", "Account Created", anonID, "", map[string]any{"plan": "free"}, t0.Add(3*time.Second)), time.Time{})
+	s.Update(makeEvent(t, "track", "Source Created", anonID, "", map[string]any{"source_type": "javascript", "elapsed_seconds_in_setup": 87}, t0.Add(6*time.Second)), time.Time{})
 	s.Update(makeEvent(t, "track", "Destination Setup Error", anonID, "",
 		map[string]any{"destination_type": "Amplitude", "step": "credentials_validation", "error_code": "AMP_INVALID_API_KEY", "error_message": "Provided API key was rejected", "elapsed_seconds_in_step": 134},
-		t0.Add(10*time.Second)))
+		t0.Add(10*time.Second)), time.Time{})
 
 	snap, ok := s.Snapshot(anonID)
 	if !ok {
@@ -210,7 +210,7 @@ func TestSnapshotIsDeepCopy(t *testing.T) {
 	s := New(0)
 	const anonID = "anon-deep-copy"
 	t0 := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
-	s.Update(makeEvent(t, "track", "Listing Viewed", anonID, "/listings", map[string]any{"price": 1000.0}, t0))
+	s.Update(makeEvent(t, "track", "Listing Viewed", anonID, "/listings", map[string]any{"price": 1000.0}, t0), time.Time{})
 
 	// Seed identify with a nested map and slice trait — these are the
 	// shapes JSON unmarshalling produces from real payloads.
@@ -220,7 +220,7 @@ func TestSnapshotIsDeepCopy(t *testing.T) {
 		MessageID:         "id1",
 		OriginalTimestamp: t0,
 		Traits:            json.RawMessage(`{"tech_stack":["javascript","next.js"],"preferences":{"beds":3,"suburbs":["s1","s2"]}}`),
-	})
+	}, time.Time{})
 
 	snap1, _ := s.Snapshot(anonID)
 	if snap1.EventNameCount["Listing Viewed"] != 1 {
@@ -273,9 +273,9 @@ func TestScanIdleReturnsOnlyStale(t *testing.T) {
 	s := New(0)
 	now := time.Now().UTC()
 	// fresh window (LastSeen now)
-	s.Update(makeEvent(t, "track", "Recent", "fresh", "", nil, now))
+	s.Update(makeEvent(t, "track", "Recent", "fresh", "", nil, now), time.Time{})
 	// stale window (LastSeen 30s ago)
-	s.Update(makeEvent(t, "track", "Old", "stale", "", nil, now.Add(-30*time.Second)))
+	s.Update(makeEvent(t, "track", "Old", "stale", "", nil, now.Add(-30*time.Second)), time.Time{})
 
 	var seen []string
 	s.ScanIdle(10*time.Second, func(snap Snapshot) {
@@ -289,8 +289,8 @@ func TestScanIdleReturnsOnlyStale(t *testing.T) {
 func TestPruneRemovesOldWindows(t *testing.T) {
 	s := New(0)
 	now := time.Now().UTC()
-	s.Update(makeEvent(t, "track", "Recent", "fresh", "", nil, now))
-	s.Update(makeEvent(t, "track", "Old", "stale", "", nil, now.Add(-time.Hour)))
+	s.Update(makeEvent(t, "track", "Recent", "fresh", "", nil, now), time.Time{})
+	s.Update(makeEvent(t, "track", "Old", "stale", "", nil, now.Add(-time.Hour)), time.Time{})
 
 	if got := s.Active(); got != 2 {
 		t.Fatalf("Active = %d, want 2", got)
@@ -327,7 +327,7 @@ func TestLRUEviction(t *testing.T) {
 	// Insert 5 windows; the count must never exceed 3 by much (soft cap).
 	for i := 0; i < 5; i++ {
 		anonID := fmt.Sprintf("anon-lru-%d", i)
-		s.Update(makeEvent(t, "track", "x", anonID, "", nil, time.Now().UTC()))
+		s.Update(makeEvent(t, "track", "x", anonID, "", nil, time.Now().UTC()), time.Time{})
 	}
 	if s.Active() > 3 {
 		t.Errorf("Active = %d, want <= 3 (soft cap)", s.Active())
@@ -337,7 +337,7 @@ func TestLRUEviction(t *testing.T) {
 func TestRunPrunerLifecycle(t *testing.T) {
 	s := New(0)
 	now := time.Now().UTC()
-	s.Update(makeEvent(t, "track", "Old", "stale", "", nil, now.Add(-time.Hour)))
+	s.Update(makeEvent(t, "track", "Old", "stale", "", nil, now.Add(-time.Hour)), time.Time{})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
@@ -375,7 +375,7 @@ func TestConcurrentWithWindow(t *testing.T) {
 				// 5 hot keys to ensure contention on a single shard.
 				anonID := fmt.Sprintf("anon-%d", rng.Intn(5))
 				ts := time.Unix(1700000000, int64(i)*int64(time.Millisecond))
-				s.Update(makeEvent(t, "track", "Listing Viewed", anonID, "/listings", map[string]any{"price": float64(1000 + i)}, ts))
+				s.Update(makeEvent(t, "track", "Listing Viewed", anonID, "/listings", map[string]any{"price": float64(1000 + i)}, ts), time.Time{})
 				if i%10 == 0 {
 					_, _ = s.Snapshot(anonID)
 				}
@@ -404,7 +404,7 @@ func TestCooldownTracking(t *testing.T) {
 	s := New(0)
 	const anonID = "anon-cd"
 	t0 := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
-	s.Update(makeEvent(t, "track", "x", anonID, "", nil, t0))
+	s.Update(makeEvent(t, "track", "x", anonID, "", nil, t0), time.Time{})
 
 	s.WithWindow(anonID, func(w *UserWindow) {
 		w.MarkTriggered("rule-A", t0)
@@ -462,9 +462,53 @@ func TestSSEStream_TriggerWindowSnapshotIdleSeconds(t *testing.T) {
 	}
 }
 
+// TestApply_LastSeenUsesReceivedAtNotOriginalTimestamp verifies that apply uses
+// the supplied receivedAt as the authoritative clock for LastSeen / FirstSeen,
+// not the (potentially stale) OriginalTimestamp on the event. This is the
+// regression test for the demo-script bug where all 8 events share an identical
+// OriginalTimestamp stamped at script-build-time, causing the idle ticker to
+// fire prematurely because LastSeen never advanced.
+func TestApply_LastSeenUsesReceivedAtNotOriginalTimestamp(t *testing.T) {
+	s := New(0)
+	const anonID = "anon-received-at-test"
+
+	// Simulate a stale event: OriginalTimestamp is 1 hour in the past, but
+	// receivedAt is now (the server dequeued it just now).
+	staleOriginal := time.Now().UTC().Add(-1 * time.Hour)
+	receivedAt := time.Now().UTC()
+
+	s.Update(&event.Event{
+		Type:              "track",
+		Event:             "Listing Viewed",
+		AnonymousID:       anonID,
+		MessageID:         "msg-stale",
+		OriginalTimestamp: staleOriginal,
+	}, receivedAt)
+
+	snap, ok := s.Snapshot(anonID)
+	if !ok {
+		t.Fatalf("snapshot missing for %s", anonID)
+	}
+
+	// LastSeen must be receivedAt, not staleOriginal.
+	// We allow a 1-second tolerance for clock jitter.
+	diff := snap.LastSeen.Sub(receivedAt)
+	if diff < -time.Second || diff > time.Second {
+		t.Errorf("LastSeen = %v, want approx receivedAt=%v (diff=%v); stale OriginalTimestamp=%v must NOT be used",
+			snap.LastSeen, receivedAt, diff, staleOriginal)
+	}
+
+	// FirstSeen must also be receivedAt, not staleOriginal.
+	diff2 := snap.FirstSeen.Sub(receivedAt)
+	if diff2 < -time.Second || diff2 > time.Second {
+		t.Errorf("FirstSeen = %v, want approx receivedAt=%v (diff=%v); stale OriginalTimestamp=%v must NOT be used",
+			snap.FirstSeen, receivedAt, diff2, staleOriginal)
+	}
+}
+
 func TestUpdateNilEventNoop(t *testing.T) {
 	s := New(0)
-	s.Update(nil)
+	s.Update(nil, time.Time{})
 	if s.Active() != 0 {
 		t.Errorf("nil update should not create windows")
 	}
@@ -472,7 +516,7 @@ func TestUpdateNilEventNoop(t *testing.T) {
 
 func TestUpdateEmptyAnonID(t *testing.T) {
 	s := New(0)
-	s.Update(&event.Event{Type: "track", Event: "x"})
+	s.Update(&event.Event{Type: "track", Event: "x"}, time.Time{})
 	if s.Active() != 0 {
 		t.Errorf("event without anonymousId/userId should be skipped")
 	}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 
 	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/event"
 	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/rules"
+	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/sse"
 	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/window"
 )
 
@@ -41,13 +43,13 @@ func TestOnDemoReset_PurgesMemoryState(t *testing.T) {
 		AnonymousID:       "anon-1",
 		MessageID:         "m1",
 		OriginalTimestamp: time.Now(),
-	})
+	}, time.Time{})
 	store.Update(&event.Event{
 		Type:              "track",
 		AnonymousID:       "anon-2",
 		MessageID:         "m2",
 		OriginalTimestamp: time.Now(),
-	})
+	}, time.Time{})
 	if store.Active() != 2 {
 		t.Fatalf("expected 2 windows before reset, got %d", store.Active())
 	}
@@ -90,5 +92,77 @@ func TestOnDemoReset_IdempotentOnEmpty(t *testing.T) {
 	}
 	if cooldownsCleared != 0 || windowsCleared != 0 {
 		t.Errorf("expected (0,0) on empty state, got (%d,%d)", cooldownsCleared, windowsCleared)
+	}
+}
+
+// TestDemoReset_PublishesResetEventOnAllStreams verifies that OnDemoReset
+// publishes an SSE "reset" event on all four streams (events, windows,
+// triggers, mock_emails). Connected dashboard clients use this signal to
+// clear their React state immediately.
+func TestDemoReset_PublishesResetEventOnAllStreams(t *testing.T) {
+	t.Parallel()
+
+	hub := sse.NewHub(sse.WithHeartbeatInterval(20 * time.Millisecond))
+	t.Cleanup(func() { _ = hub.Close(context.Background()) })
+
+	rt := &runtime{
+		engine:  rules.NewEngine(nil, rules.NewMemoryCooldownGate()),
+		windows: window.New(0),
+		log:     slog.New(slog.NewTextHandler(os.Stderr, nil)),
+		hub:     hub,
+	}
+
+	// Subscribe to each stream before calling OnDemoReset.
+	streamNames := []string{
+		sse.StreamEvents,
+		sse.StreamWindows,
+		sse.StreamTriggers,
+		sse.StreamMockEmails,
+	}
+
+	type result struct {
+		stream  string
+		gotReset bool
+	}
+	results := make(chan result, len(streamNames))
+
+	for _, name := range streamNames {
+		ch, unsub := hub.Subscribe(name)
+		defer unsub()
+		go func(stream string, ch <-chan sse.Message) {
+			deadline := time.After(2 * time.Second)
+			for {
+				select {
+				case msg, ok := <-ch:
+					if !ok {
+						results <- result{stream: stream, gotReset: false}
+						return
+					}
+					if strings.EqualFold(msg.Event, sse.EventReset) {
+						results <- result{stream: stream, gotReset: true}
+						return
+					}
+				case <-deadline:
+					results <- result{stream: stream, gotReset: false}
+					return
+				}
+			}
+		}(name, ch)
+	}
+
+	// Small delay so subscriber goroutines are listening before we reset.
+	time.Sleep(20 * time.Millisecond)
+
+	_, _, err := rt.OnDemoReset(context.Background())
+	if err != nil {
+		t.Fatalf("OnDemoReset returned error: %v", err)
+	}
+
+	// Collect results from all streams.
+	for range streamNames {
+		r := <-results
+		if !r.gotReset {
+			t.Errorf("stream %q: did not receive reset event within 2s", r.stream)
+		}
 	}
 }

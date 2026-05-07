@@ -31,8 +31,10 @@ func (rt *runtime) runPipeline(ctx context.Context) {
 			if !keep {
 				continue
 			}
-			// Update window aggregations.
-			rt.windows.Update(processed.Event)
+			// Update window aggregations. Pass processed.ReceivedAt as the
+			// authoritative server-side clock so idle detection uses real
+			// wall-clock silence, not potentially-stale client timestamps.
+			rt.windows.Update(processed.Event, processed.ReceivedAt)
 
 			// Stream the event to the SSE events channel — best-effort.
 			rt.hub.Publish(sse.StreamEvents, sse.Message{

@@ -89,13 +89,27 @@ func newUserWindow(anonID string, now time.Time) *UserWindow {
 
 // apply incrementally folds a single event into the window.
 //
+// receivedAt is the server-side wall-clock time the event was dequeued — used
+// as the authoritative clock for idle detection (LastSeen / FirstSeen). Client
+// clocks can be skewed or stale (see Bug 1 fix: re-stamping on send still
+// leaves demo events bunched within microseconds at script-build time without
+// this defence). Using receivedAt means the idle ticker's real_now-LastSeen
+// correctly tracks wall-clock silence, not event timestamp skew.
+//
 // The function is intentionally small and deterministic — it touches only
 // fields documented in §3.3 and never panics on malformed payloads.
-func (w *UserWindow) apply(e *event.Event) {
+func (w *UserWindow) apply(e *event.Event, receivedAt time.Time) {
 	if e == nil {
 		return
 	}
-	now := e.OriginalTimestamp
+	// Use receivedAt as the authoritative time for window bookkeeping.
+	// Fall back to e.OriginalTimestamp (then time.Now) if the caller supplied
+	// a zero value — this preserves correct behaviour in unit tests that
+	// simulate logical time via OriginalTimestamp without a real ReceivedAt.
+	now := receivedAt
+	if now.IsZero() {
+		now = e.OriginalTimestamp
+	}
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}

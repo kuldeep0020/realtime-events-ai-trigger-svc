@@ -95,7 +95,15 @@ func (f *Firer) Fire(ctx context.Context, script []ScriptStep) (int, error) {
 			}
 		}
 
-		body, err := buildBatchBody(step.Event)
+		// Re-stamp the event at actual send time so timestamps are spread
+		// across the real wall-clock duration of the script, not all identical
+		// to the moment the script slice was constructed.
+		ev := step.Event
+		now := time.Now().UTC()
+		ev.OriginalTimestamp = now
+		ev.SentAt = now
+
+		body, err := buildBatchBody(ev)
 		if err != nil {
 			return sent, oops.With("step", i).Wrapf(err, "Fire: build body")
 		}
@@ -105,9 +113,9 @@ func (f *Firer) Fire(ctx context.Context, script []ScriptStep) (int, error) {
 		sent++
 		f.Logger.Info("demo-fire: step sent",
 			"step", i,
-			"type", step.Event.Type,
-			"event", step.Event.Event,
-			"path", step.Event.PagePath(),
+			"type", ev.Type,
+			"event", ev.Event,
+			"path", ev.PagePath(),
 		)
 	}
 	return sent, nil

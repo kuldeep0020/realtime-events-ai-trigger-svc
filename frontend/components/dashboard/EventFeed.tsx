@@ -132,6 +132,11 @@ export function EventFeed({ highlightedIds = new Set(), subscriberCount = 0 }: E
 
   const onMessage = useCallback(
     (msg: { event?: string; data: unknown }) => {
+      if (msg.event === "reset") {
+        // Server-side demo reset: clear local event list.
+        setEvents([]);
+        return;
+      }
       if (msg.event === "events" || msg.event === undefined) {
         setConnected(true);
         const payload = msg.data as SSEEventPayload;
@@ -151,8 +156,9 @@ export function EventFeed({ highlightedIds = new Set(), subscriberCount = 0 }: E
     []
   );
 
-  useSSEStream("events", onMessage);
+  useSSEStream("events", onMessage, true, () => setConnected(true));
 
+  // Safety net: also mark connected once events start arriving (e.g. in mock mode).
   useEffect(() => {
     if (events.length > 0) setConnected(true);
   }, [events.length]);

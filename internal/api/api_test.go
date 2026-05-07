@@ -732,6 +732,81 @@ func TestSSEStream_MockEmailsPayloadShape(t *testing.T) {
 	}
 }
 
+// TestReplayLastTrigger_PublishesToSSE verifies that replayTriggerSSEMessage
+// builds an sse.Message whose Data map contains every field required by the
+// frontend SSETriggerPayload, and that the message can be published to a real
+// Hub so a subscriber receives it.
+//
+// The test exercises the pure helper without a Postgres pool. The integration
+// path (handler calls hub.Publish) is covered by the manual curl verification
+// described in the task brief.
+func TestReplayLastTrigger_PublishesToSSE(t *testing.T) {
+	t.Parallel()
+
+	firedAt := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
+	row := replayLastTriggerResponse{
+		ID:             "test-uuid-001",
+		RuleName:       "idle_10s",
+		Persona:        "realestate",
+		AnonymousID:    "anon-replay-test",
+		FiredAt:        firedAt,
+		WindowSnapshot: json.RawMessage(`{"event_count":3,"idle_seconds":11}`),
+		LLMParsed:      json.RawMessage(`{"subject":"hello"}`),
+		Destination:    "email:demo@example.com",
+		DispatchStatus: "sent",
+	}
+
+	msg := replayTriggerSSEMessage(row)
+
+	// Event name must match the stream so the frontend addEventListener fires.
+	if msg.Event != sse.StreamTriggers {
+		t.Errorf("expected Event=%q, got %q", sse.StreamTriggers, msg.Event)
+	}
+
+	data, ok := msg.Data.(map[string]any)
+	if !ok {
+		t.Fatalf("expected Data to be map[string]any, got %T", msg.Data)
+	}
+
+	// All required SSETriggerPayload fields must be present.
+	for _, key := range []string{"id", "rule_name", "persona", "anonymous_id", "fired_at",
+		"window_snapshot", "destination", "dispatch_status", "llm_parsed"} {
+		if _, exists := data[key]; !exists {
+			t.Errorf("SSE data missing required key %q; keys present: %v", key, mapKeys(data))
+		}
+	}
+
+	// fired_at must be RFC3339.
+	if got, ok := data["fired_at"].(string); !ok || got != "2024-06-01T12:00:00Z" {
+		t.Errorf("fired_at mismatch: got %v", data["fired_at"])
+	}
+
+	// Verify the message round-trips through the hub to a subscriber.
+	hub := sse.NewHub(sse.WithHeartbeatInterval(20 * time.Millisecond))
+	defer func() { _ = hub.Close(context.Background()) }()
+
+	ch, unsub := hub.Subscribe(sse.StreamTriggers)
+	defer unsub()
+
+	hub.Publish(sse.StreamTriggers, msg)
+
+	select {
+	case received := <-ch:
+		if received.Event != sse.StreamTriggers {
+			t.Errorf("received event=%q, want %q", received.Event, sse.StreamTriggers)
+		}
+		rData, ok := received.Data.(map[string]any)
+		if !ok {
+			t.Fatalf("received Data not a map, got %T", received.Data)
+		}
+		if rData["id"] != "test-uuid-001" {
+			t.Errorf("received id=%v, want test-uuid-001", rData["id"])
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("timeout: subscriber did not receive replayed trigger message")
+	}
+}
+
 // mapKeys is a test helper that returns the keys of a map for readable error messages.
 func mapKeys(m map[string]any) []string {
 	keys := make([]string, 0, len(m))

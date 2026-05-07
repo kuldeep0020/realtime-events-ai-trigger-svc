@@ -5,12 +5,13 @@
  * plus the initial GET /api/mock-emails poll.
  */
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Mail } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useSSEStream } from "@/lib/sse";
 import { EmailViewer } from "@/components/email-viewer/EmailViewer";
+import { listMockEmails } from "@/lib/api-client";
 import type { MockEmailPayload } from "@/types/api";
 
 interface EmailOutboxProps {
@@ -22,10 +23,39 @@ export function EmailOutbox({ streamEmails = [] }: EmailOutboxProps) {
   const [emails, setEmails] = useState<MockEmailPayload[]>([]);
   const [selected, setSelected] = useState<MockEmailPayload | null>(null);
 
+  // On mount, fetch existing emails from the API so the outbox is populated
+  // even when the user wasn't on this tab when triggers fired.
+  // Use a functional update to merge with any SSE emails that may have arrived
+  // while the GET was in-flight, de-duplicating by id to avoid dropped messages.
+  useEffect(() => {
+    listMockEmails()
+      .then((resp) => {
+        setEmails((prev) => {
+          const seen = new Set(prev.map((e) => e.id));
+          const merged = [...prev];
+          for (const e of resp.emails as MockEmailPayload[]) {
+            if (!seen.has(e.id)) merged.push(e);
+          }
+          // Sort newest first so the merged ordering matches what SSE inserts.
+          merged.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+          return merged;
+        });
+      })
+      .catch(() => {
+        // Non-fatal: SSE will still deliver new emails.
+      });
+  }, []);
+
   const onMessage = useCallback((msg: { event?: string; data: unknown }) => {
+    if (msg.event === "reset") {
+      // Server-side demo reset: clear email list.
+      setEmails([]);
+      return;
+    }
     if (msg.event === "mock_emails" || msg.event === undefined) {
       const payload = msg.data as MockEmailPayload;
       if (!payload.id) return;
+      // De-duplicate: the initial GET may already have this email.
       setEmails((prev) => {
         if (prev.some((e) => e.id === payload.id)) return prev;
         return [payload, ...prev];

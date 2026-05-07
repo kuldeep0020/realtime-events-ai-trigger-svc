@@ -98,17 +98,17 @@ func fireRealEstateSequence(t *testing.T, store *window.Store, anonID string, t0
 		MessageID:         "id0",
 		OriginalTimestamp: t0,
 		Traits:            json.RawMessage(`{"membership_tier":"browse"}`),
-	})
-	store.Update(makeEvent(t, "page", "", anonID, "/listings", nil, t0.Add(2*time.Second)))
+	}, time.Time{})
+	store.Update(makeEvent(t, "page", "", anonID, "/listings", nil, t0.Add(2*time.Second)), time.Time{})
 	store.Update(makeEvent(t, "track", "Listing Viewed", anonID, "/listings",
-		map[string]any{"listing_id": "L101", "suburb": "suburb-1", "price": 1200000.0, "bedrooms": 3, "sq_ft": 2100}, t0.Add(5*time.Second)))
+		map[string]any{"listing_id": "L101", "suburb": "suburb-1", "price": 1200000.0, "bedrooms": 3, "sq_ft": 2100}, t0.Add(5*time.Second)), time.Time{})
 	store.Update(makeEvent(t, "track", "Filter Applied", anonID, "/listings",
-		map[string]any{"beds_min": 3, "price_min": 1000000, "price_max": 1800000, "results_count": 24}, t0.Add(9*time.Second)))
+		map[string]any{"beds_min": 3, "price_min": 1000000, "price_max": 1800000, "results_count": 24}, t0.Add(9*time.Second)), time.Time{})
 	store.Update(makeEvent(t, "track", "Listing Viewed", anonID, "/listings",
-		map[string]any{"listing_id": "L107", "suburb": "suburb-1", "price": 1500000.0, "bedrooms": 4, "sq_ft": 2400}, t0.Add(13*time.Second)))
+		map[string]any{"listing_id": "L107", "suburb": "suburb-1", "price": 1500000.0, "bedrooms": 4, "sq_ft": 2400}, t0.Add(13*time.Second)), time.Time{})
 	store.Update(makeEvent(t, "track", "Listing Viewed", anonID, "/listings",
-		map[string]any{"listing_id": "L112", "suburb": "suburb-1", "price": 1350000.0, "bedrooms": 3, "sq_ft": 2200}, t0.Add(17*time.Second)))
-	store.Update(makeEvent(t, "page", "", anonID, "/listings/L112", nil, t0.Add(20*time.Second)))
+		map[string]any{"listing_id": "L112", "suburb": "suburb-1", "price": 1350000.0, "bedrooms": 3, "sq_ft": 2200}, t0.Add(17*time.Second)), time.Time{})
+	store.Update(makeEvent(t, "page", "", anonID, "/listings/L112", nil, t0.Add(20*time.Second)), time.Time{})
 }
 
 func fireRSSelfSequence(t *testing.T, store *window.Store, anonID string, t0 time.Time, includeError bool) {
@@ -120,14 +120,14 @@ func fireRSSelfSequence(t *testing.T, store *window.Store, anonID string, t0 tim
 		MessageID:         "id0",
 		OriginalTimestamp: t0,
 		Traits:            json.RawMessage(`{"plan":"free","company":"Acme"}`),
-	})
-	store.Update(makeEvent(t, "track", "Account Created", anonID, "", map[string]any{"plan": "free"}, t0.Add(3*time.Second)))
+	}, time.Time{})
+	store.Update(makeEvent(t, "track", "Account Created", anonID, "", map[string]any{"plan": "free"}, t0.Add(3*time.Second)), time.Time{})
 	store.Update(makeEvent(t, "track", "Source Created", anonID, "",
-		map[string]any{"source_type": "javascript", "elapsed_seconds_in_setup": 87}, t0.Add(6*time.Second)))
+		map[string]any{"source_type": "javascript", "elapsed_seconds_in_setup": 87}, t0.Add(6*time.Second)), time.Time{})
 	if includeError {
 		store.Update(makeEvent(t, "track", "Destination Setup Error", anonID, "",
 			map[string]any{"destination_type": "Amplitude", "step": "credentials_validation",
-				"error_code": "AMP_INVALID_API_KEY", "error_message": "rejected", "elapsed_seconds_in_step": 134}, t0.Add(10*time.Second)))
+				"error_code": "AMP_INVALID_API_KEY", "error_message": "rejected", "elapsed_seconds_in_step": 134}, t0.Add(10*time.Second)), time.Time{})
 	}
 }
 
@@ -329,7 +329,7 @@ func TestCooldownIsLastGate(t *testing.T) {
 	// Now fire the error event; Allow should be consulted exactly once
 	// (one matching rule).
 	store.Update(makeEvent(t, "track", "Destination Setup Error", anonID, "",
-		map[string]any{"error_code": "AMP_INVALID_API_KEY"}, atErr))
+		map[string]any{"error_code": "AMP_INVALID_API_KEY"}, atErr), time.Time{})
 	snap2, _ := store.Snapshot(anonID)
 	atomic.StoreInt32(&gate.allowCalls, 0)
 	atomic.StoreInt32(&gate.markCalls, 0)
@@ -617,13 +617,13 @@ func TestNotPredicate(t *testing.T) {
 	}
 	store := window.New(0)
 	t0 := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
-	store.Update(makeEvent(t, "track", "x", "anon", "", nil, t0))
+	store.Update(makeEvent(t, "track", "x", "anon", "", nil, t0), time.Time{})
 	snap, _ := store.Snapshot("anon")
 	if !expr.Eval(snap, t0) {
 		t.Errorf("Not(has_event_type=page) should be true when no page events seen")
 	}
 	// Now add a page event.
-	store.Update(makeEvent(t, "page", "", "anon", "/p", nil, t0))
+	store.Update(makeEvent(t, "page", "", "anon", "/p", nil, t0), time.Time{})
 	snap2, _ := store.Snapshot("anon")
 	if expr.Eval(snap2, t0) {
 		t.Errorf("Not(has_event_type=page) should be false when page event present")
@@ -650,7 +650,7 @@ func TestTraitsValueAndKnown(t *testing.T) {
 		MessageID:         "m",
 		OriginalTimestamp: t0,
 		Traits:            json.RawMessage(`{"plan":"free"}`),
-	})
+	}, time.Time{})
 	snap, _ := store.Snapshot("u1")
 	if !expr.Eval(snap, t0) {
 		t.Errorf("expected traits.value to match")
@@ -666,12 +666,12 @@ func TestDistinctPathsAtLeast(t *testing.T) {
 	}
 	store := window.New(0)
 	t0 := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
-	store.Update(makeEvent(t, "page", "", "u", "/a", nil, t0))
+	store.Update(makeEvent(t, "page", "", "u", "/a", nil, t0), time.Time{})
 	snap, _ := store.Snapshot("u")
 	if expr.Eval(snap, t0) {
 		t.Errorf("1 distinct path should fail >=2")
 	}
-	store.Update(makeEvent(t, "page", "", "u", "/b", nil, t0))
+	store.Update(makeEvent(t, "page", "", "u", "/b", nil, t0), time.Time{})
 	snap2, _ := store.Snapshot("u")
 	if !expr.Eval(snap2, t0) {
 		t.Errorf("2 distinct paths should satisfy >=2")

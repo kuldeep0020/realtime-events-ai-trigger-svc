@@ -59,11 +59,16 @@ const MOCK_SEQUENCES: Partial<Record<StreamName, unknown[]>> = {
  * The connection is torn down on component unmount or when stream/onMessage
  * reference changes. onMessage is wrapped in a stable ref to prevent infinite
  * re-subscription loops when the caller passes an inline function.
+ *
+ * onOpen, if provided, is called when the EventSource connection is established.
+ * Use this to flip UI state from "connecting" to "connected" without waiting
+ * for the first data event.
  */
 export function useSSEStream(
   stream: StreamName,
   onMessage: SSEMessageHandler,
-  enabled = true
+  enabled = true,
+  onOpen?: () => void
 ): void {
   const handlerRef = useRef<SSEMessageHandler>(onMessage);
   handlerRef.current = onMessage;
@@ -71,6 +76,9 @@ export function useSSEStream(
   const stableHandler = useCallback((msg: SSEMessage) => {
     handlerRef.current(msg);
   }, []);
+
+  const onOpenRef = useRef<(() => void) | undefined>(onOpen);
+  onOpenRef.current = onOpen;
 
   useEffect(() => {
     if (!enabled) return;
@@ -108,13 +116,15 @@ export function useSSEStream(
       stableHandler({ id: ev.lastEventId, event: ev.type, data: parsed });
     };
 
-    // Listen for named events the server emits (e.g., event: "trigger")
+    // Listen for named events the server emits (e.g., event: "trigger").
+    // "reset" is included so all columns receive the demo-reset signal.
     const eventNames: string[] = [
       "events",
       "windows",
       "triggers",
       "mock_emails",
       "window_pruned",
+      "reset",
     ];
     const namedListeners = eventNames.map((name) => {
       const listener = (ev: MessageEvent<string>) => {
@@ -129,6 +139,10 @@ export function useSSEStream(
       source.addEventListener(name, listener);
       return { name, listener };
     });
+
+    source.onopen = () => {
+      onOpenRef.current?.();
+    };
 
     source.onerror = () => {
       // EventSource auto-reconnects on error; no explicit action needed.

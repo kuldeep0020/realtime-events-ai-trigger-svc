@@ -57,6 +57,11 @@ const EventHeartbeat = "heartbeat"
 // listener registers ("window_pruned").
 const EventWindowPruned = "window_pruned"
 
+// EventReset is the SSE event type published on ALL four streams when a demo
+// reset completes. Each column's onMessage handler clears its local React state
+// on receipt so the UI reflects the clean server state immediately.
+const EventReset = "reset"
+
 // Tunables. Kept package-private so tests have a single override point.
 const (
 	subscriberBufferSize = 64
