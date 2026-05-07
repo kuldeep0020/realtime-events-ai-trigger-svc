@@ -1,7 +1,53 @@
 # Realtime Events AI Triggers — Hackathon Handoff Snapshot
 
-**Snapshot taken**: 2026-05-07 ~23:35 IST (rev 4)
-**Status**: ready to demo to senior leadership. Service renamed to `realtime-events-ai-trigger-svc` (display: "Realtime Events AI Triggers"). Three rounds of engineer + reviewer pairs have polished the demo: SSE wire-shape alignment (`3ef416b`) → 7 demo-quality issues (`584ddd7`) → rename + 3 polish (`8d91d82`) → tab persistence + initial-fetch + race fix (next commit). Demo runbook lives at `docs/DEMO_RUNBOOK.md`.
+**Snapshot taken**: 2026-05-08 ~02:00 IST (rev 6 — overnight demo-maturity build)
+**Status**: ready for morning leadership demo. Six work packages shipped overnight via parallel subagents: rich mock activation profiles, templated canned responses, concurrent multi-session firer with speed multiplier, use-case gallery wizard, outcome banner + ROI tile, controller count/speed pickers. End-to-end verified via Playwright. Demo runbook lives at `docs/DEMO_RUNBOOK.md`.
+
+## Demo maturity build — overnight (rev 6)
+
+User asked for a more business-resonant demo: multiple users at once, named visitors with demographics, outcome-first wizard framing, and a banner that calls out the business outcome of each trigger. Spec at `docs/specs/2026-05-08-demo-maturity-design.md`; execution plan at `docs/plans/PLAN-demo-maturity.md`. Six commits since baseline `07c36fb`:
+
+| SHA | Scope | What |
+|---|---|---|
+| `fb617ac` | seed | 6 known + 2 anonymous realestate profiles; 3 rs-self profiles; canned responses with `{{trait.x}}`/`{{window.x}}`/`{{realtor.x}}`/`{{outcome.x}}` placeholders + `:pct`/`:money` format hints; realestate config split into `realtor_known_high_intent` (uses `traits.known: email`) and `realtor_anonymous_high_intent` (uses `not + traits.known: email`); realtor roster expanded to 5 with phone numbers; idle_seconds 10→8 |
+| `2d6fa3d` | dispatch | `internal/dispatch/template.go` regex-based placeholder fill (recursive across maps/slices, missing→"n/a"); `BuildWindowMap`/`SelectRealtor`/`BuildOutcomeMap` helpers; window struct gains `LastListingProps`/`LastFilterProps`/`DominantSuburb` (mode count + tie-break); realtor roster auto-loaded from active config at boot; trigger SSE message gains `enriched_traits` + `assigned_realtor` (additive); persisted `llm_parsed` is now the rendered output, not raw |
+| `927f5fc` | demofire | 8 realestate profileSpecs + 8 variations (suburb, listings, beds_min); 3 rs-self profileSpecs; per-profile identify-trait emission so `traits.known: email` distinguishes known vs anonymous; `Firer.Speed` multiplier; `RunConcurrent` with 500ms-per-index staggered start + drain-on-error; `/api/demo/fire-script` accepts `count` ∈ {1,2,3} and `speed` ∈ {0.5,1.0,2.0} |
+| `e8995e5` | frontend wizard | New step 0 of `/onboarding`: 4-card use-case gallery ("Win back high-intent anonymous visitors", "Alert realtors to known high-value leads", "Rescue stuck destination setup", "Re-engage abandoned onboarding"); selecting a card pre-fills persona and skips PersonaPicker; "Or pick by persona →" link preserves the original path |
+| `7e169b6` | frontend dash | OutcomeBanner cycles unseen triggers at 4s intervals with 12s linger on the last; three style variants (known=blue / anonymous=amber / rs-self=emerald); ROITile shows triggers fired + est. revenue protected ($X.XM) + avg time-to-action; both subscribe to triggers SSE |
+| `9b8c1a5` | frontend ctrl | Sessions (1/2/3 default 2) + Speed (0.5x/1x/2x default 1x) segmented pickers; dynamic Fire button labels; types/api.ts FireScriptRequest extended with count/speed |
+| `42a3ad6` | fix | TriggerStream rendered the new object-shaped `assigned_realtor` directly as a React child → "Objects are not valid as a React child" crash. Now coerces via `realtorLabel(action)` helper accepting both string (v1) and `{name, phone, hours}` (v2) shapes; also handles the anonymous variant's `assigned_realtor_on_standby` |
+
+### Verification done overnight (Playwright)
+
+- `/onboarding` shows the 4-card use-case gallery; clicking "Win back high-intent anonymous visitors" advances directly to "Configure rules" (PersonaPicker skipped as designed)
+- `/dashboard` with backend up + frontend pointed at `NEXT_PUBLIC_API_BASE=http://localhost:8080`:
+  - ROI tile populates after triggers fire: `Triggers fired: 3 | Est. revenue protected: $2.8M (est.) | Avg. time-to-action: ~6s`
+  - OutcomeBanner cycles "🕵️ → Anonymous high-intent visitor in suburb-1 | Recommended action: in-app banner | Standby realtor: Priya N." with "1 of 3" indicator
+  - 3 Active Session cards + 3 Triggers Fired cards
+- Backend smoke: `count=3 speed=2.0` → 24 events ingested, 3 triggers fired (2× `realtor_known_high_intent`, 1× `realtor_anonymous_high_intent`), all `dispatch_status=sent`. Slack message contains rendered names ("Marcus Lee", "Sarah Chen"), $1.45M deal value, 79% propensity score, realtor "Priya N." with phone
+
+Screenshots in `docs/specs/screenshot-dashboard.png` and `docs/specs/screenshot-onboarding.png`.
+
+### Critical to know before the demo
+
+1. **Frontend env var required.** The frontend defaults to mock-mode unless `NEXT_PUBLIC_API_BASE` is set. Local dev: `frontend/.env.local` already contains `NEXT_PUBLIC_API_BASE=http://localhost:8080`. On the cluster, point it at the API ingress.
+2. **Reseed required.** The new canned templates + profiles require `./realtime-trigger seed --from hand --seed-dir ./seed --dsn $POSTGRES_DSN`. Run `/api/demo/reset` first or the seed errors on FK from `triggers` to `rules`.
+3. **Restart backend after reseed.** `runtime.realtors` is loaded once at boot from the active realestate config. Without a restart, `assigned_realtor` will be empty in dispatched messages.
+4. **The `count=3` configuration is the headline.** It always rotates through Sarah Chen (known) + Marcus Lee (known) + Anonymous slot (re-003), demonstrating both `realtor_known_high_intent` AND `realtor_anonymous_high_intent` rules in one click.
+5. **Speed 0.5x stretches the realestate script to ~64s.** Use it when leadership is reading along; 1x for narration; 2x for re-runs during Q&A.
+6. **Email tab still works for rs-self.** Distinct emails per rule (`rs_destination_error` vs `rs_onboarding_stuck`) preserved from rev 4.
+
+### Known minor nits (acceptable for demo)
+
+- The dashboard's "Live Events" feed occasionally takes a few seconds to backfill on page load (uses `/api/recent-events` GET on mount; the existing TriggerStream/EventFeed pattern). Not a regression.
+- ROI tile counts only triggers received via SSE since page load — the page does NOT seed from `/api/recent-triggers` on mount (intentional simplicity v1). Reload after a fire and the tile is empty until next fire.
+- Auto-reset-on-Fire flow: clicking Fire while another Fire is in flight cancels the prior one and starts fresh. Status text briefly says "Resetting state…" — not a bug.
+
+### Breakpoint for morning recovery
+
+Pre-execution baseline is committed at `07c36fb` ("docs(specs): demo maturity design + execution plan"). To revert all overnight work: `git reset --hard 07c36fb`.
+
+
 
 ## Demo polish round 5 (rev 5)
 
