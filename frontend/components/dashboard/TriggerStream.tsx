@@ -31,7 +31,23 @@ interface RealestateAction extends Record<string, unknown> {
   talking_points: string[];
   best_cta: string;
   urgency: "high" | "medium" | "low";
-  assigned_realtor?: string;
+  // assigned_realtor was a string in v1 ("Priya N.") but is an object in
+  // v2 with the templated canned-response schema ({name, phone, hours}).
+  // Accept both for backwards-compat.
+  assigned_realtor?: string | { name?: string; phone?: string; hours?: string };
+  // v2 anonymous variant uses a different key:
+  assigned_realtor_on_standby?: { name?: string; phone?: string; hours?: string };
+}
+
+/**
+ * Coerce the assigned_realtor field (string or object) into a display string.
+ * Returns empty string if the field is absent or unparseable.
+ */
+function realtorLabel(action: RealestateAction): string {
+  const r = action.assigned_realtor ?? action.assigned_realtor_on_standby;
+  if (!r) return "";
+  if (typeof r === "string") return r;
+  return r.name ?? "";
 }
 
 function isRealestateAction(obj: Record<string, unknown>): obj is RealestateAction {
@@ -133,12 +149,12 @@ function RealestateDecision({ action }: { action: RealestateAction }) {
           {/* CTA */}
           <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800">
             <p className="text-xs text-violet-300 font-medium">{action.best_cta}</p>
-            {action.assigned_realtor && (
+            {realtorLabel(action) && (
               <Badge
                 variant="outline"
                 className="text-[10px] border-slate-600 text-slate-400 shrink-0"
               >
-                {action.assigned_realtor}
+                {realtorLabel(action)}
               </Badge>
             )}
           </div>
