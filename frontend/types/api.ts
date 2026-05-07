@@ -139,6 +139,11 @@ export interface MockEmailsResponse {
 
 export interface FireScriptRequest {
   persona: Persona;
+  /** Concurrent sessions to fire: 1, 2, or 3. Defaults to 1 on backend. */
+  count?: number;
+  /** Playback multiplier: 0.5, 1.0, or 2.0. Defaults to 1.0 on backend. */
+  speed?: number;
+  /** @deprecated kept for backwards-compat; backend ignores. Use `speed` instead. */
   speed_factor?: number;
 }
 

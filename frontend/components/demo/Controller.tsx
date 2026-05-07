@@ -20,11 +20,25 @@ import {
 import { fireScript, demoReset, replayLastTrigger } from "@/lib/api-client";
 import type { Persona } from "@/types/api";
 
-// Script fire durations (approximate)
+// Script fire durations (approximate, at 1x speed)
 const SCRIPT_DURATIONS: Record<Persona, number> = {
   realestate: 22_000,
   "rs-self": 12_000,
 };
+
+// Valid session count options
+const SESSION_COUNTS = [1, 2, 3] as const;
+type SessionCount = (typeof SESSION_COUNTS)[number];
+
+// Valid speed multiplier options
+const SPEED_OPTIONS = [0.5, 1.0, 2.0] as const;
+type SpeedOption = (typeof SPEED_OPTIONS)[number];
+
+function speedLabel(s: SpeedOption): string {
+  if (s === 0.5) return "0.5x";
+  if (s === 1.0) return "1x";
+  return "2x";
+}
 
 interface FiringState {
   persona: Persona;
@@ -45,6 +59,8 @@ export function Controller({ compact = false, onPersonaChange }: ControllerProps
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [activePersona, setActivePersona] = useState<Persona | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [sessionCount, setSessionCount] = useState<SessionCount>(2);
+  const [speed, setSpeed] = useState<SpeedOption>(1.0);
   const rafRef = useRef<number | null>(null);
 
   // Cancel any pending RAF on unmount
@@ -54,22 +70,27 @@ export function Controller({ compact = false, onPersonaChange }: ControllerProps
     };
   }, []);
 
-  // Animate progress bar while script fires
-  const startProgressAnimation = useCallback((persona: Persona) => {
-    const duration = SCRIPT_DURATIONS[persona];
-    const started = Date.now();
-    setProgress(0);
+  // Animate progress bar while script fires.
+  // The effective duration scales by 1/speed (0.5x → 2× longer, 2x → half).
+  const startProgressAnimation = useCallback(
+    (persona: Persona, speedMultiplier: SpeedOption) => {
+      const baseDuration = SCRIPT_DURATIONS[persona];
+      const duration = baseDuration / speedMultiplier;
+      const started = Date.now();
+      setProgress(0);
 
-    const tick = () => {
-      const elapsed = Date.now() - started;
-      const pct = Math.min(100, (elapsed / duration) * 100);
-      setProgress(pct);
-      if (pct < 100) {
-        rafRef.current = requestAnimationFrame(tick);
-      }
-    };
-    rafRef.current = requestAnimationFrame(tick);
-  }, []);
+      const tick = () => {
+        const elapsed = Date.now() - started;
+        const pct = Math.min(100, (elapsed / duration) * 100);
+        setProgress(pct);
+        if (pct < 100) {
+          rafRef.current = requestAnimationFrame(tick);
+        }
+      };
+      rafRef.current = requestAnimationFrame(tick);
+    },
+    []
+  );
 
   const handleFireScript = useCallback(
     async (persona: Persona) => {
@@ -77,7 +98,7 @@ export function Controller({ compact = false, onPersonaChange }: ControllerProps
       setFiring({
         persona,
         startedAt: Date.now(),
-        duration: SCRIPT_DURATIONS[persona],
+        duration: SCRIPT_DURATIONS[persona] / speed,
       });
       setActivePersona(persona);
       setStatusMessage("Resetting state…");
@@ -90,10 +111,13 @@ export function Controller({ compact = false, onPersonaChange }: ControllerProps
         console.warn("auto-reset failed; proceeding with fire", err);
       }
 
-      startProgressAnimation(persona);
+      startProgressAnimation(persona, speed);
 
       try {
-        const result = await fireScript({ persona });
+        // Pass count + speed alongside persona. FireScriptRequest currently
+        // FireScriptRequest now declares count + speed (types/api.ts);
+        // backend handler validates count ∈ {1,2,3}, speed ∈ {0.5,1.0,2.0}.
+        const result = await fireScript({ persona, count: sessionCount, speed });
         setStatusMessage(`Fired ${result.event_count} events — ${result.status}`);
       } catch (err) {
         setStatusMessage(`Error: ${err instanceof Error ? err.message : "unknown"}`);
@@ -103,7 +127,7 @@ export function Controller({ compact = false, onPersonaChange }: ControllerProps
         setTimeout(() => setProgress(0), 1000);
       }
     },
-    [firing, onPersonaChange, startProgressAnimation]
+    [firing, speed, sessionCount, onPersonaChange, startProgressAnimation]
   );
 
   const handleReset = useCallback(async () => {
@@ -152,25 +176,47 @@ export function Controller({ compact = false, onPersonaChange }: ControllerProps
           )}
         </div>
 
+        {/* Sessions + speed pickers */}
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-slate-500 w-12 shrink-0">Sessions</span>
+            <SegmentedControl
+              options={SESSION_COUNTS.map((n) => ({ value: n, label: String(n) }))}
+              value={sessionCount}
+              onChange={(v) => setSessionCount(v as SessionCount)}
+              size="xs"
+            />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-slate-500 w-12 shrink-0">Speed</span>
+            <SegmentedControl
+              options={SPEED_OPTIONS.map((s) => ({ value: s, label: speedLabel(s) }))}
+              value={speed}
+              onChange={(v) => setSpeed(v as SpeedOption)}
+              size="xs"
+            />
+          </div>
+        </div>
+
         <Button
           size="sm"
           disabled={firing !== null}
           onClick={() => handleFireScript("realestate")}
           className="bg-violet-700 hover:bg-violet-600 text-white h-8 text-xs w-full"
-          aria-label="Fire real-estate demo script"
+          aria-label={`Fire ${sessionCount} realestate session${sessionCount > 1 ? "s" : ""} at ${speedLabel(speed)}`}
         >
           <Building2 className="w-3 h-3 mr-1.5" aria-hidden="true" />
-          Real-estate
+          {`Fire ${sessionCount} realestate @ ${speedLabel(speed)}`}
         </Button>
         <Button
           size="sm"
           disabled={firing !== null}
           onClick={() => handleFireScript("rs-self")}
           className="bg-blue-700 hover:bg-blue-600 text-white h-8 text-xs w-full"
-          aria-label="Fire RS-self demo script"
+          aria-label={`Fire ${sessionCount} rs-self session${sessionCount > 1 ? "s" : ""} at ${speedLabel(speed)}`}
         >
           <Code2 className="w-3 h-3 mr-1.5" aria-hidden="true" />
-          RS-self
+          {`Fire ${sessionCount} rs-self @ ${speedLabel(speed)}`}
         </Button>
 
         {firing && (
@@ -242,6 +288,28 @@ export function Controller({ compact = false, onPersonaChange }: ControllerProps
         )}
       </div>
 
+      {/* Sessions + speed pickers */}
+      <div className="flex flex-wrap gap-6">
+        <div className="flex flex-col gap-1.5">
+          <span className="text-xs text-slate-400 font-medium">Sessions</span>
+          <SegmentedControl
+            options={SESSION_COUNTS.map((n) => ({ value: n, label: String(n) }))}
+            value={sessionCount}
+            onChange={(v) => setSessionCount(v as SessionCount)}
+            size="sm"
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <span className="text-xs text-slate-400 font-medium">Speed</span>
+          <SegmentedControl
+            options={SPEED_OPTIONS.map((s) => ({ value: s, label: speedLabel(s) }))}
+            value={speed}
+            onChange={(v) => setSpeed(v as SpeedOption)}
+            size="sm"
+          />
+        </div>
+      </div>
+
       {/* Big fire buttons */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Button
@@ -249,12 +317,11 @@ export function Controller({ compact = false, onPersonaChange }: ControllerProps
           disabled={firing !== null}
           onClick={() => handleFireScript("realestate")}
           className="h-20 text-base bg-violet-700 hover:bg-violet-600 text-white flex-col gap-1.5 disabled:opacity-50"
-          aria-label="Fire Real-Estate demo script"
+          aria-label={`Fire ${sessionCount} realestate session${sessionCount > 1 ? "s" : ""} at ${speedLabel(speed)}`}
           aria-busy={firing?.persona === "realestate"}
         >
           <Building2 className="w-5 h-5" aria-hidden="true" />
-          Fire Real-Estate Script
-          <span className="text-xs font-normal opacity-70">~22s</span>
+          {`Fire ${sessionCount} realestate session${sessionCount > 1 ? "s" : ""} @ ${speedLabel(speed)}`}
         </Button>
 
         <Button
@@ -262,12 +329,11 @@ export function Controller({ compact = false, onPersonaChange }: ControllerProps
           disabled={firing !== null}
           onClick={() => handleFireScript("rs-self")}
           className="h-20 text-base bg-blue-700 hover:bg-blue-600 text-white flex-col gap-1.5 disabled:opacity-50"
-          aria-label="Fire RS-Self demo script"
+          aria-label={`Fire ${sessionCount} rs-self session${sessionCount > 1 ? "s" : ""} at ${speedLabel(speed)}`}
           aria-busy={firing?.persona === "rs-self"}
         >
           <Code2 className="w-5 h-5" aria-hidden="true" />
-          Fire RS-Self Script
-          <span className="text-xs font-normal opacity-70">~12s</span>
+          {`Fire ${sessionCount} rs-self session${sessionCount > 1 ? "s" : ""} @ ${speedLabel(speed)}`}
         </Button>
       </div>
 
@@ -339,6 +405,55 @@ export function Controller({ compact = false, onPersonaChange }: ControllerProps
         onConfirm={handleReset}
         onCancel={() => setResetDialogOpen(false)}
       />
+    </div>
+  );
+}
+
+// ─── Segmented control ───────────────────────────────────────────────────────
+
+interface SegmentedControlOption<T> {
+  value: T;
+  label: string;
+}
+
+interface SegmentedControlProps<T> {
+  options: SegmentedControlOption<T>[];
+  value: T;
+  onChange: (value: T) => void;
+  /** "sm" for full layout, "xs" for compact */
+  size?: "xs" | "sm";
+}
+
+function SegmentedControl<T extends number | string>({
+  options,
+  value,
+  onChange,
+  size = "sm",
+}: SegmentedControlProps<T>) {
+  const isXs = size === "xs";
+  return (
+    <div className="flex rounded-md overflow-hidden border border-slate-700" role="group">
+      {options.map((opt, idx) => {
+        const active = opt.value === value;
+        return (
+          <button
+            key={String(opt.value)}
+            type="button"
+            onClick={() => onChange(opt.value)}
+            className={[
+              "font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-violet-500",
+              isXs ? "text-[10px] px-2 py-0.5" : "text-xs px-3 py-1",
+              idx > 0 ? "border-l border-slate-700" : "",
+              active
+                ? "bg-violet-700 text-white"
+                : "bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200",
+            ].join(" ")}
+            aria-pressed={active}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
