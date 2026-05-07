@@ -1,36 +1,244 @@
+# Realestate profiles — 8 slots, rotation order fixed
+# Slots 3 and 8 are anonymous (no YAML entry; activation returns empty for them)
+
+# --- Realestate: KNOWN profiles ---
+
 - entity: user
   id_type: anonymous_id
   id_value: "anon_demo-re-001"
   traits:
-    first_seen_at: "2026-04-15T09:23:00Z"
-    last_seen_at: "2026-05-07T08:14:00Z"
-    total_sessions: 12
-    total_listing_views: 47
-    favorite_suburbs: ["suburb-1", "suburb-3"]
-    price_range_min: 1100000
-    price_range_max: 1600000
+    first_name: "Sarah"
+    last_name: "Chen"
+    email: "sarah.chen@stripe.com"
+    age: 34
+    occupation: "Senior Product Manager"
+    employer: "Stripe"
+    income_band: "$200k-$300k"
+    family_status: "married, 1 child"
+    propensity_score: 0.87
+    preferred_suburbs: ["suburb-1", "suburb-3"]
     preferred_bedrooms: 3
-    is_repeat_visitor: true
     inferred_intent: "purchase_within_30d"
+    first_seen_at: "2026-03-10T07:45:00Z"
+    last_seen_at: "2026-05-07T08:14:00Z"
+    total_sessions: 14
+    total_listing_views: 52
+    is_repeat_visitor: true
     membership_tier: "browse"
+    prior_listings_viewed: ["L101", "L103", "L107", "L108", "L112", "L115"]
+
+- entity: user
+  id_type: anonymous_id
+  id_value: "anon_demo-re-002"
+  traits:
+    first_name: "Marcus"
+    last_name: "Lee"
+    email: "marcus.lee@figma.com"
+    age: 41
+    occupation: "Engineering Director"
+    employer: "Figma"
+    income_band: "$300k-$500k"
+    family_status: "married, 2 children"
+    propensity_score: 0.79
+    preferred_suburbs: ["suburb-1", "suburb-2"]
+    preferred_bedrooms: 4
+    inferred_intent: "purchase_within_60d"
+    first_seen_at: "2026-03-22T11:00:00Z"
+    last_seen_at: "2026-05-06T17:31:00Z"
+    total_sessions: 9
+    total_listing_views: 38
+    is_repeat_visitor: true
+    membership_tier: "browse"
+    prior_listings_viewed: ["L104", "L107", "L109", "L112", "L115", "L117"]
+
+# Slot 3 (anon_demo-re-003) is ANONYMOUS — no YAML entry.
+# The firer emits a sparse identify (no email) so traits.known: email is false.
+# Rule realtor_anonymous_high_intent fires for this visitor.
+
+- entity: user
+  id_type: anonymous_id
+  id_value: "anon_demo-re-004"
+  traits:
+    first_name: "Priya"
+    last_name: "Sharma"
+    email: "priya.sharma@plaid.com"
+    age: 38
+    occupation: "VP of Marketing"
+    employer: "Plaid"
+    income_band: "$250k-$400k"
+    family_status: "married, no kids"
+    propensity_score: 0.82
+    preferred_suburbs: ["suburb-1"]
+    preferred_bedrooms: 3
+    inferred_intent: "purchase_within_30d"
+    first_seen_at: "2026-04-01T09:00:00Z"
+    last_seen_at: "2026-05-07T14:22:00Z"
+    total_sessions: 11
+    total_listing_views: 47
+    is_repeat_visitor: true
+    membership_tier: "browse"
+    prior_listings_viewed: ["L102", "L107", "L110", "L112", "L118", "L120"]
+
+- entity: user
+  id_type: anonymous_id
+  id_value: "anon_demo-re-005"
+  traits:
+    first_name: "David"
+    last_name: "Martinez"
+    email: "david.m@anthropic.com"
+    age: 47
+    occupation: "Staff Software Engineer"
+    employer: "Anthropic"
+    income_band: "$400k-$600k"
+    family_status: "married, 3 children"
+    propensity_score: 0.91
+    preferred_suburbs: ["suburb-3", "suburb-2"]
+    preferred_bedrooms: 4
+    inferred_intent: "purchase_within_30d"
+    first_seen_at: "2026-02-18T06:30:00Z"
+    last_seen_at: "2026-05-08T10:05:00Z"
+    total_sessions: 18
+    total_listing_views: 78
+    is_repeat_visitor: true
+    membership_tier: "browse"
+    prior_listings_viewed: ["L301", "L303", "L305", "L307", "L311", "L312", "L315"]
+
+- entity: user
+  id_type: anonymous_id
+  id_value: "anon_demo-re-006"
+  traits:
+    first_name: "Jordan"
+    last_name: "Patel"
+    email: "jordan.p@example.com"
+    propensity_score: 0.65
+    inferred_intent: "browsing"
+    first_seen_at: "2026-04-20T13:15:00Z"
+    last_seen_at: "2026-05-07T16:44:00Z"
+    total_sessions: 5
+    total_listing_views: 31
+    is_repeat_visitor: true
+    membership_tier: "browse"
+    prior_listings_viewed: ["L201", "L204", "L207", "L210", "L214"]
+
+- entity: user
+  id_type: anonymous_id
+  id_value: "anon_demo-re-007"
+  traits:
+    first_name: "Emma"
+    last_name: "Wilson"
+    email: "emma.wilson@notion.so"
+    age: 29
+    occupation: "Product Designer"
+    employer: "Notion"
+    income_band: "$150k-$200k"
+    family_status: "single"
+    propensity_score: 0.74
+    preferred_suburbs: ["suburb-2"]
+    preferred_bedrooms: 2
+    inferred_intent: "purchase_within_90d"
+    first_seen_at: "2026-04-10T16:00:00Z"
+    last_seen_at: "2026-05-06T19:55:00Z"
+    total_sessions: 7
+    total_listing_views: 33
+    is_repeat_visitor: true
+    membership_tier: "browse"
+    prior_listings_viewed: ["L202", "L205", "L207", "L209", "L211"]
+
+# Slot 8 (anon_demo-re-008) is ANONYMOUS — no YAML entry.
+# Second anonymous slot for variety in count=4+ scenarios if ever needed.
+
+# --- Rs-self profiles (user_id + anonymous_id entries per profile) ---
 
 - entity: user
   id_type: user_id
   id_value: "demo-rs-001"
   traits:
+    first_name: "Alex"
+    last_name: "Rivera"
+    email: "alex@acme.io"
+    company: "Acme"
+    role: "Engineer"
     plan: "free"
-    signup_date: "2026-05-04"
-    company_size: "11-50"
-    tech_stack: ["javascript", "next.js", "amplitude"]
     onboarding_progress: "destination_setup"
-    last_doc_visited: "/docs/destinations/streaming-destinations/amplitude/"
+    tech_stack: ["javascript", "next.js", "amplitude"]
     support_tier: "community"
+    signup_date: "2026-04-28"
+    company_size: "11-50"
     setup_minutes_so_far: 27
+    last_doc_visited: "/docs/destinations/streaming-destinations/amplitude/"
 
-# Also indexable by anonymousId — the rs-self demo uses identical userId and anonymousId values
 - entity: user
   id_type: anonymous_id
   id_value: "demo-rs-001"
   traits:
+    first_name: "Alex"
+    last_name: "Rivera"
+    email: "alex@acme.io"
+    company: "Acme"
+    role: "Engineer"
     plan: "free"
     onboarding_progress: "destination_setup"
+    tech_stack: ["javascript", "next.js", "amplitude"]
+    support_tier: "community"
+
+- entity: user
+  id_type: user_id
+  id_value: "demo-rs-002"
+  traits:
+    first_name: "Jamie"
+    last_name: "Kim"
+    email: "jamie@beacon.dev"
+    company: "Beacon"
+    role: "DevOps Lead"
+    plan: "growth"
+    onboarding_progress: "source_setup_done_destinations_pending"
+    tech_stack: ["react", "segment-migrate"]
+    support_tier: "priority"
+    signup_date: "2026-04-22"
+    company_size: "51-200"
+    setup_minutes_so_far: 45
+
+- entity: user
+  id_type: anonymous_id
+  id_value: "demo-rs-002"
+  traits:
+    first_name: "Jamie"
+    last_name: "Kim"
+    email: "jamie@beacon.dev"
+    company: "Beacon"
+    role: "DevOps Lead"
+    plan: "growth"
+    onboarding_progress: "source_setup_done_destinations_pending"
+    tech_stack: ["react", "segment-migrate"]
+    support_tier: "priority"
+
+- entity: user
+  id_type: user_id
+  id_value: "demo-rs-003"
+  traits:
+    first_name: "Sam"
+    last_name: "Patel"
+    email: "sam@cobaltdata.com"
+    company: "Cobalt Data"
+    role: "CTO"
+    plan: "enterprise"
+    onboarding_progress: "webhook_validation_failing"
+    tech_stack: ["python", "segment-migrate", "hightouch"]
+    support_tier: "enterprise"
+    signup_date: "2026-04-15"
+    company_size: "201-500"
+    setup_minutes_so_far: 62
+
+- entity: user
+  id_type: anonymous_id
+  id_value: "demo-rs-003"
+  traits:
+    first_name: "Sam"
+    last_name: "Patel"
+    email: "sam@cobaltdata.com"
+    company: "Cobalt Data"
+    role: "CTO"
+    plan: "enterprise"
+    onboarding_progress: "webhook_validation_failing"
+    tech_stack: ["python", "segment-migrate", "hightouch"]
+    support_tier: "enterprise"

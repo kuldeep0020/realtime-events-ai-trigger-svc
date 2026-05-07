@@ -22,6 +22,7 @@ type PersonaConfig struct {
 // owns realtor selection.
 type RealtorEntry struct {
 	Name    string   `yaml:"name" json:"name"`
+	Phone   string   `yaml:"phone,omitempty" json:"phone,omitempty"`
 	Suburbs []string `yaml:"suburbs" json:"suburbs"`
 	Hours   string   `yaml:"hours,omitempty" json:"hours,omitempty"`
 }

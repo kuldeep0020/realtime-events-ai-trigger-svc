@@ -4,63 +4,65 @@ canned_llm:
     variant: default
     priority: 100
     raw_json:
-      headline: "Anonymous visitor abandoned a high-intent session in Suburb 1"
+      headline: "🏡 {{trait.first_name}} {{trait.last_name}} is browsing in {{window.dominant_suburb}} — high intent"
+      visitor_summary:
+        name: "{{trait.first_name}} {{trait.last_name}}"
+        email: "{{trait.email}}"
+        age: "{{trait.age}}"
+        occupation: "{{trait.occupation}} at {{trait.employer}}"
+        income_band: "{{trait.income_band}}"
+        family: "{{trait.family_status}}"
+        propensity_score: "{{trait.propensity_score:pct}}"
       talking_points:
-        - "Viewed 3 listings (L101, L107, L112) in suburb-1 — all 3-4BR, $1.2M-$1.5M"
-        - "Applied filter beds_min=3 right after the first listing — knows what they want"
-        - "Spent 22 seconds on L112 detail page before idling — strongest signal"
-      best_cta: "Call within 30 minutes; lead with L112 — matches every filter criterion"
+        - "Viewed {{window.event_count}} events in this session — last on listing {{window.last_listing_id}} ({{window.last_listing.price:money}}, {{window.last_listing.bedrooms}}BR)"
+        - "Applied filter beds_min={{window.last_filter.beds_min}}, suburb={{window.last_filter.suburb}} — narrowing intent"
+        - "Spent {{window.idle_seconds}}s on detail page before idling — strongest signal"
+        - "Income band {{trait.income_band}} aligns with the {{window.last_listing.price:money}} list price"
+        - "Repeat visitor — already viewed {{trait.total_listing_views}} listings across {{trait.total_sessions}} sessions"
+      best_cta: "Call {{trait.first_name}} on {{trait.email}} within {{outcome.urgency_minutes}} minutes. Lead with {{window.last_listing_id}} — matches every filter criterion."
+      estimated_deal_value: "{{outcome.estimated_deal_value}}"
       urgency: high
-      assigned_realtor: "Priya N."
+      assigned_realtor:
+        name: "{{realtor.name}}"
+        phone: "{{realtor.phone}}"
+        hours: "{{realtor.hours}}"
 
-  - template_name: rs_onboarding_stuck
-    persona: rs-self
+  - template_name: realestate_realtor_anonymous
+    persona: realestate
     variant: default
     priority: 100
     raw_json:
-      subject: "Stuck on the Amplitude API key error? Here's the fix in 3 steps"
-      body_markdown: |
-        Hi there,
-
-        We noticed you hit `AMP_INVALID_API_KEY` while setting up your Amplitude
-        destination. This usually means the key is correct but pointing to a
-        different Amplitude project, or the key lacks ingestion permissions.
-
-        ### Try this in order
-
-        1. **Verify the key matches the right project.** In Amplitude, go to
-           *Settings → Projects* and confirm the API key column matches what you
-           entered in RudderStack.
-        2. **Check the key's permissions.** Amplitude has separate keys for
-           ingestion vs admin. RudderStack needs the ingestion key (server-side).
-        3. **Test the connection** with the *Test Destination* button after
-           re-pasting the key. A green checkmark confirms credentials are accepted.
-
-        If it's still failing after these three steps, reply with the request ID
-        from the destination error log and we'll get you unstuck same-day.
-
-        — RudderStack
-      doc_links:
-        - title: "Setting up Amplitude as a destination"
-          url: "https://www.rudderstack.com/docs/destinations/streaming-destinations/amplitude/"
-        - title: "Authentication & API keys (Amplitude destination)"
-          url: "https://www.rudderstack.com/docs/destinations/streaming-destinations/amplitude/#connection-settings"
-        - title: "Testing destination connections"
-          url: "https://www.rudderstack.com/docs/dashboard-guides/destinations/#test-destinations"
-      next_step_cta: "Reply with your error log request ID for fast-track help"
+      headline: "🕵️ Anonymous high-intent visitor in {{window.dominant_suburb}} — recommend in-app capture"
+      visitor_summary:
+        name: "Anonymous visitor"
+        status: "Acting like a buyer (≥3 listings, narrowing filters) but has not identified"
+      talking_points:
+        - "Viewed {{window.event_count}} events; last listing {{window.last_listing_id}} ({{window.last_listing.price:money}}, {{window.last_listing.bedrooms}}BR)"
+        - "Filter pattern: beds_min={{window.last_filter.beds_min}}, suburb={{window.last_filter.suburb}}"
+        - "Spent {{window.idle_seconds}}s idling on the detail page"
+        - "No identify call yet — no name, no email, no phone"
+      best_cta: "{{outcome.recommended_action}}. If they engage, you'll capture an email within ~60s; reassign to {{realtor.name}}."
+      recommended_in_app_banner:
+        headline: "Want a tour of {{window.last_listing_id}}? Tap to book in 30s — no signup required."
+        cta: "Book a tour →"
+      urgency: medium
+      assigned_realtor_on_standby:
+        name: "{{realtor.name}}"
+        phone: "{{realtor.phone}}"
+        hours: "{{realtor.hours}}"
 
   - template_name: rs_destination_error
     persona: rs-self
     variant: default
     priority: 100
     raw_json:
-      subject: "Quick fix: Amplitude API key error in your destination setup"
+      subject: "Quick fix for the {{window.last_error.error_code}} error in your Amplitude setup, {{trait.first_name}}"
       body_markdown: |
-        Hi there,
+        Hi {{trait.first_name}},
 
-        We just saw an `AMP_INVALID_API_KEY` error during your Amplitude destination
-        setup. This is one of the top-3 destination setup errors and is almost
-        always one of these three causes:
+        We just saw an `{{window.last_error.error_code}}` error from your Amplitude
+        destination at {{trait.company}}. This is one of the top-3 destination setup
+        errors and is almost always one of these three causes:
 
         1. **The API key is for a different Amplitude project.** Open Amplitude →
            *Settings → Projects* and copy the key from the project that should
@@ -84,6 +86,42 @@ canned_llm:
         - title: "Test Destination button reference"
           url: "https://www.rudderstack.com/docs/dashboard-guides/destinations/#test-destinations"
       next_step_cta: "Reply with your request ID if step 1-3 don't unblock you"
+
+  - template_name: rs_onboarding_stuck
+    persona: rs-self
+    variant: default
+    priority: 100
+    raw_json:
+      subject: "{{trait.first_name}}, your Amplitude destination is one step from done"
+      body_markdown: |
+        Hi {{trait.first_name}},
+
+        We saw you hit `{{window.last_error.error_code}}` while finishing your
+        Amplitude destination setup at {{trait.company}}. Most teams clear this
+        with a single fix — see the three checks below.
+
+        ### Try this in order
+
+        1. **Verify the key matches the right project.** In Amplitude, go to
+           *Settings → Projects* and confirm the API key column matches what you
+           entered in RudderStack.
+        2. **Check the key's permissions.** Amplitude has separate keys for
+           ingestion vs admin. RudderStack needs the ingestion key (server-side).
+        3. **Test the connection** with the *Test Destination* button after
+           re-pasting the key. A green checkmark confirms credentials are accepted.
+
+        If it's still failing after these three steps, reply with the request ID
+        from the destination error log and we'll get you unstuck same-day.
+
+        — RudderStack
+      doc_links:
+        - title: "Setting up Amplitude as a destination"
+          url: "https://www.rudderstack.com/docs/destinations/streaming-destinations/amplitude/"
+        - title: "Authentication & API keys (Amplitude destination)"
+          url: "https://www.rudderstack.com/docs/destinations/streaming-destinations/amplitude/#connection-settings"
+        - title: "Testing destination connections"
+          url: "https://www.rudderstack.com/docs/dashboard-guides/destinations/#test-destinations"
+      next_step_cta: "Reply with your error log request ID for fast-track help"
 
 canned_kapa:
   - query_pattern: "Amplitude API key error %"

@@ -1,31 +1,50 @@
 persona: realestate
 realtors:
-- name: Priya N.
-  suburbs:
-  - suburb-1
-  - suburb-2
-  hours: 09:00-18:00 IST
-- name: Arjun M.
-  suburbs:
-  - suburb-3
-  hours: 10:00-19:00 IST
-- name: Mira K.
-  suburbs:
-  - countryside-1
-  - countryside-2
-  hours: 08:00-17:00 IST
+  - name: Priya N.
+    phone: "+91-98765-43210"
+    suburbs: [suburb-1, suburb-2]
+    hours: "09:00-18:00 IST"
+  - name: Arjun M.
+    phone: "+91-98765-43211"
+    suburbs: [suburb-3]
+    hours: "10:00-19:00 IST"
+  - name: Mira K.
+    phone: "+91-98765-43212"
+    suburbs: [countryside-1, countryside-2]
+    hours: "08:00-17:00 IST"
+  - name: Rohan B.
+    phone: "+91-98765-43213"
+    suburbs: [suburb-1, suburb-3]
+    hours: "11:00-20:00 IST"
+  - name: Tanvi S.
+    phone: "+91-98765-43214"
+    suburbs: [suburb-2]
+    hours: "09:00-17:00 IST"
 slack_channel: realestate-realtor-pings
 rules:
-- name: realtor_session_abandoned
-  when:
-    all:
-    - window.event_count:
-        '>=': 3
-    - window.event_path_matches: ^/listings(/|$).*
-    - window.idle_seconds:
-        '>=': 10
-    - window.has_event_type: page
-  fire:
-    action_template: realestate_realtor_pitch
-    destination: slack:realestate-realtor-pings
-    cooldown_seconds: 3600
+  - name: realtor_known_high_intent
+    when:
+      all:
+        - window.event_count: { ">=": 3 }
+        - window.event_path_matches: "^/listings(/|$).*"
+        - window.idle_seconds: { ">=": 8 }
+        - window.has_event_type: page
+        - traits.known: email
+    fire:
+      action_template: realestate_realtor_pitch
+      destination: "slack:realestate-realtor-pings"
+      cooldown_seconds: 3600
+
+  - name: realtor_anonymous_high_intent
+    when:
+      all:
+        - window.event_count: { ">=": 3 }
+        - window.event_path_matches: "^/listings(/|$).*"
+        - window.idle_seconds: { ">=": 8 }
+        - window.has_event_type: page
+        - not:
+            traits.known: email
+    fire:
+      action_template: realestate_realtor_anonymous
+      destination: "slack:realestate-realtor-pings"
+      cooldown_seconds: 3600
