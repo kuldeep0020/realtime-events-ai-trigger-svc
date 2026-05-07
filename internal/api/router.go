@@ -17,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/sse"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/window"
 )
 
 // SeedFS abstracts read access to the seed/ directory. Production code uses
@@ -48,10 +49,11 @@ type DemoResetFunc func(ctx context.Context) (cooldownsCleared, windowsCleared i
 
 // Server wires the API. Construct via New, then mount via Handler().
 type Server struct {
-	pool   *pgxpool.Pool
-	hub    *sse.Hub
-	seed   SeedFS
-	router *chi.Mux
+	pool        *pgxpool.Pool
+	hub         *sse.Hub
+	seed        SeedFS
+	windowStore *window.Store
+	router      *chi.Mux
 	// metrics is the lightweight counter store used by /metrics. We keep
 	// the Prometheus client lib out of the hackathon binary.
 	metrics *metrics
@@ -74,6 +76,7 @@ type Config struct {
 	Pool        *pgxpool.Pool
 	Hub         *sse.Hub
 	Seed        SeedFS
+	WindowStore *window.Store
 	FireScript  FireScriptFunc
 	AdminSeed   AdminSeedFunc
 	OnDemoReset DemoResetFunc
@@ -87,6 +90,7 @@ func New(cfg Config) *Server {
 		pool:        cfg.Pool,
 		hub:         cfg.Hub,
 		seed:        cfg.Seed,
+		windowStore: cfg.WindowStore,
 		fireScript:  cfg.FireScript,
 		adminSeed:   cfg.AdminSeed,
 		onDemoReset: cfg.OnDemoReset,
@@ -146,6 +150,11 @@ func (s *Server) buildRouter() *chi.Mux {
 
 		// Mock email viewer.
 		r.Get("/mock-emails", s.handleListMockEmails)
+
+		// Dashboard rehydration endpoints (browser refresh / initial load).
+		r.Get("/recent-events", s.handleRecentEvents)
+		r.Get("/active-sessions", s.handleActiveSessions)
+		r.Get("/recent-triggers", s.handleRecentTriggers)
 
 		// Admin.
 		r.Post("/admin/seed", s.handleAdminSeed)

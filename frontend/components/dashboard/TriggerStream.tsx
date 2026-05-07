@@ -7,13 +7,14 @@
  * based on persona (real-estate Slack card vs rs-self email card).
  */
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import { ExternalLink, Target, CheckCircle, Clock, AlertCircle, Mail } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useSSEStream } from "@/lib/sse";
+import { listRecentTriggers } from "@/lib/api-client";
 import { EmailViewer } from "@/components/email-viewer/EmailViewer";
 import type { SSETriggerPayload, MockEmailPayload } from "@/types/api";
 
@@ -380,10 +381,50 @@ interface TriggerStreamProps {
 export function TriggerStream({ onTriggerFired }: TriggerStreamProps) {
   const [triggers, setTriggers] = useState<TriggerEntry[]>([]);
 
+  // Epoch counter to guard against the initial-fetch/reset race:
+  // if a `reset` SSE arrives while the GET /api/recent-triggers is still
+  // in-flight, the fetch may resolve after the reset and re-populate state
+  // with stale rows. Incrementing the epoch on every reset and capturing it
+  // before the fetch lets us discard results that belong to a prior era.
+  const resetEpochRef = useRef(0);
+
+  // On mount, seed the trigger list with recent triggers from the backend so
+  // the dashboard rehydrates after a browser refresh without waiting for SSE.
+  useEffect(() => {
+    const epoch = resetEpochRef.current;
+    listRecentTriggers(20)
+      .then((resp) => {
+        if (epoch < resetEpochRef.current) return; // a reset arrived — drop stale result
+        setTriggers((prev) => {
+          const seen = new Set(prev.map((t) => t.id));
+          const toAdd: TriggerEntry[] = [];
+          for (const payload of resp.triggers) {
+            if (!payload.id || seen.has(payload.id)) continue;
+            seen.add(payload.id);
+            toAdd.push({
+              id: payload.id,
+              payload,
+              receivedAt: new Date(payload.fired_at).getTime() || Date.now(),
+            });
+          }
+          if (toAdd.length === 0) return prev;
+          // Merge: SSE-received entries (prev) stay on top; initial-fetch entries
+          // append after, sorted newest-first within themselves.
+          toAdd.sort((a, b) => b.receivedAt - a.receivedAt);
+          return [...prev, ...toAdd];
+        });
+      })
+      .catch((err) =>
+        console.warn("[TriggerStream] initial fetch failed:", err)
+      );
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const onMessage = useCallback(
     (msg: { event?: string; data: unknown }) => {
       if (msg.event === "reset") {
-        // Server-side demo reset: clear trigger list.
+        // Server-side demo reset: advance epoch so any in-flight initial fetch
+        // is discarded on resolve, then clear trigger list.
+        resetEpochRef.current += 1;
         setTriggers([]);
         return;
       }

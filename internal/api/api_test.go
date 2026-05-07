@@ -7,12 +7,16 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/db"
 	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/sse"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/window"
 )
 
 // newTestServer wires a Server with a fresh hub and an in-memory SeedFS.
@@ -814,6 +818,303 @@ func mapKeys(m map[string]any) []string {
 		keys = append(keys, k)
 	}
 	return keys
+}
+
+// --- Dashboard rehydration endpoint nil-guard tests ---
+
+func TestRecentEvents_NoDB_503(t *testing.T) {
+	t.Parallel()
+	srv := newTestServer(t)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/recent-events", nil))
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("expected 503 (pool nil), got %d", rec.Code)
+	}
+}
+
+func TestActiveSessions_NoStore_503(t *testing.T) {
+	t.Parallel()
+	// newTestServer does not set WindowStore, so handleActiveSessions must return 503.
+	srv := newTestServer(t)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/active-sessions", nil))
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("expected 503 (window store nil), got %d", rec.Code)
+	}
+}
+
+func TestRecentTriggers_NoDB_503(t *testing.T) {
+	t.Parallel()
+	srv := newTestServer(t)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/recent-triggers", nil))
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("expected 503 (pool nil), got %d", rec.Code)
+	}
+}
+
+func TestActiveSessions_WithStore_ReturnsJSON(t *testing.T) {
+	t.Parallel()
+	// Build a server with a real window store populated with two windows.
+	seed := NewMapSeedFS(map[string][]byte{
+		"persona-configs/realestate.yaml": []byte("persona: realestate\nrules: []\n"),
+	})
+	ws := buildTestWindowStore(t)
+	srv := New(Config{
+		Pool:        nil,
+		Hub:         sse.NewHub(sse.WithHeartbeatInterval(20 * time.Millisecond)),
+		Seed:        seed,
+		WindowStore: ws,
+	})
+	t.Cleanup(func() { _ = srv.hub.Close(context.Background()) })
+
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/active-sessions", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	sessions, ok := resp["sessions"].([]any)
+	if !ok {
+		t.Fatalf("expected sessions array, got %T", resp["sessions"])
+	}
+	if len(sessions) != 2 {
+		t.Errorf("expected 2 sessions, got %d", len(sessions))
+	}
+	// Each session must have anonymous_id and event_count.
+	for _, s := range sessions {
+		m, ok := s.(map[string]any)
+		if !ok {
+			t.Errorf("session not a map, got %T", s)
+			continue
+		}
+		if _, ok := m["anonymous_id"]; !ok {
+			t.Errorf("session missing anonymous_id; keys: %v", mapKeys(m))
+		}
+		if _, ok := m["event_count"]; !ok {
+			t.Errorf("session missing event_count; keys: %v", mapKeys(m))
+		}
+	}
+}
+
+func TestParseLimitParam_Defaults(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		query      string
+		defaultVal int
+		maxVal     int
+		want       int
+	}{
+		{"", 50, 200, 50},
+		{"limit=10", 50, 200, 10},
+		{"limit=300", 50, 200, 200},   // capped
+		{"limit=-5", 50, 200, 50},     // negative → default
+		{"limit=0", 50, 200, 50},      // zero → default
+		{"limit=abc", 50, 200, 50},    // invalid → default
+		{"limit=200", 50, 200, 200},   // exact max ok
+	}
+	for _, tc := range cases {
+		req := httptest.NewRequest(http.MethodGet, "/api/recent-events?"+tc.query, nil)
+		got := parseLimitParam(req, tc.defaultVal, tc.maxVal)
+		if got != tc.want {
+			t.Errorf("query=%q: got %d, want %d", tc.query, got, tc.want)
+		}
+	}
+}
+
+// buildTestWindowStore creates a Store with two windows for test assertions.
+func buildTestWindowStore(t *testing.T) *window.Store {
+	t.Helper()
+	ws := window.New(0)
+	ws.WithWindow("anon-test-001", func(w *window.UserWindow) {
+		w.EventCount = 3
+		w.LastSeen = time.Now().UTC()
+	})
+	ws.WithWindow("anon-test-002", func(w *window.UserWindow) {
+		w.EventCount = 7
+		w.LastSeen = time.Now().UTC()
+	})
+	return ws
+}
+
+// openAPITestPool opens a real Postgres pool using TEST_DATABASE_URL and runs
+// migrations. Tests calling this are skipped when the env var is unset.
+func openAPITestPool(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+	dsn := os.Getenv("TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("TEST_DATABASE_URL not set — skipping integration test")
+	}
+	ctx := context.Background()
+	pool, err := db.Open(ctx, dsn)
+	if err != nil {
+		t.Fatalf("db.Open: %v", err)
+	}
+	if err := db.RunMigrationsUp(ctx, pool, "../../migrations"); err != nil {
+		t.Fatalf("RunMigrationsUp: %v", err)
+	}
+	t.Cleanup(func() { db.Close(pool) })
+	return pool
+}
+
+// newTestServerWithPool builds a Server wired to a real Postgres pool.
+func newTestServerWithPool(t *testing.T, pool *pgxpool.Pool) *Server {
+	t.Helper()
+	seed := NewMapSeedFS(map[string][]byte{
+		"persona-configs/realestate.yaml": []byte("persona: realestate\nrules: []\n"),
+		"persona-configs/rs-self.yaml":    []byte("persona: rs-self\nrules: []\n"),
+	})
+	srv := New(Config{
+		Pool: pool,
+		Hub:  sse.NewHub(sse.WithHeartbeatInterval(20 * time.Millisecond)),
+		Seed: seed,
+	})
+	t.Cleanup(func() {
+		_ = srv.hub.Close(context.Background())
+	})
+	return srv
+}
+
+// TestRecentEvents_HappyPath_PreservesCamelCase asserts that GET /api/recent-events
+// returns event payloads verbatim from the DB with camelCase keys intact —
+// no snake_case keys must leak through re-serialisation.
+func TestRecentEvents_HappyPath_PreservesCamelCase(t *testing.T) {
+	pool := openAPITestPool(t)
+
+	// Clean up events we insert so we don't leak state across test runs.
+	ctx := context.Background()
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, `DELETE FROM events WHERE anonymous_id = 'test-camelcase-a1'`)
+	})
+
+	// Insert a raw event row whose payload contains camelCase keys — exactly the
+	// shape the RudderStack SDK sends. The handler must return these bytes verbatim.
+	payload := `{"type":"track","channel":"browser","anonymousId":"a1","messageId":"m1","originalTimestamp":"2026-05-07T12:00:00Z","event":"Listing Viewed","properties":{"price":100}}`
+	_, err := pool.Exec(ctx, `
+		INSERT INTO events (anonymous_id, write_key, event_type, event_name, payload)
+		VALUES ('test-camelcase-a1', 'wk-test', 'track', 'Listing Viewed', $1::jsonb)`,
+		payload,
+	)
+	if err != nil {
+		t.Fatalf("insert test event: %v", err)
+	}
+
+	srv := newTestServerWithPool(t, pool)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/recent-events?limit=10", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var resp struct {
+		Events []json.RawMessage `json:"events"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("parse response: %v", err)
+	}
+	if len(resp.Events) == 0 {
+		t.Fatal("expected at least 1 event in response")
+	}
+
+	// Find our inserted event by messageId.
+	var found map[string]any
+	for _, raw := range resp.Events {
+		var m map[string]any
+		if err := json.Unmarshal(raw, &m); err != nil {
+			continue
+		}
+		if m["messageId"] == "m1" {
+			found = m
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("inserted event with messageId=m1 not found in response; got %d events", len(resp.Events))
+	}
+
+	// camelCase key must be present end-to-end.
+	if v, ok := found["anonymousId"].(string); !ok || v != "a1" {
+		t.Errorf("expected anonymousId=a1, got %v", found["anonymousId"])
+	}
+	// snake_case must NOT appear — that would indicate double-serialisation.
+	rawBody := rec.Body.String()
+	if strings.Contains(rawBody, `"anonymous_id":"a1"`) {
+		t.Errorf("response must NOT contain snake_case anonymous_id; raw body snippet: %s", rawBody[:min(len(rawBody), 300)])
+	}
+}
+
+// TestRecentTriggers_HappyPath_PreservesWindowSnapshotJSON asserts that GET
+// /api/recent-triggers returns window_snapshot as a raw JSON object — not a
+// double-encoded string — so the frontend can access e.g. .event_count directly.
+func TestRecentTriggers_HappyPath_PreservesWindowSnapshotJSON(t *testing.T) {
+	pool := openAPITestPool(t)
+
+	ctx := context.Background()
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, `DELETE FROM triggers WHERE anonymous_id = 'test-snapshot-a1'`)
+	})
+
+	windowSnap := `{"event_count":7,"idle_seconds":12,"anonymous_id":"a1"}`
+	fullEvents := `[]`
+	_, err := pool.Exec(ctx, `
+		INSERT INTO triggers
+			(rule_name, persona, anonymous_id, window_snapshot, full_events, destination, dispatch_status)
+		VALUES ('test-rule', 'realestate', 'test-snapshot-a1', $1::jsonb, $2::jsonb, 'email:test@example.com', 'sent')`,
+		windowSnap, fullEvents,
+	)
+	if err != nil {
+		t.Fatalf("insert test trigger: %v", err)
+	}
+
+	srv := newTestServerWithPool(t, pool)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/recent-triggers", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var resp struct {
+		Triggers []struct {
+			AnonymousID    string          `json:"anonymous_id"`
+			WindowSnapshot json.RawMessage `json:"window_snapshot"`
+		} `json:"triggers"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("parse response: %v", err)
+	}
+	if len(resp.Triggers) == 0 {
+		t.Fatal("expected at least 1 trigger in response")
+	}
+
+	// Find our inserted trigger.
+	var snap json.RawMessage
+	for _, tr := range resp.Triggers {
+		if tr.AnonymousID == "test-snapshot-a1" {
+			snap = tr.WindowSnapshot
+			break
+		}
+	}
+	if snap == nil {
+		t.Fatal("inserted trigger with anonymous_id=test-snapshot-a1 not found")
+	}
+
+	// window_snapshot must deserialise as a JSON object — not a double-encoded string.
+	var snapObj map[string]any
+	if err := json.Unmarshal(snap, &snapObj); err != nil {
+		t.Fatalf("window_snapshot is not a JSON object (double-encoded?): %v — raw: %s", err, snap)
+	}
+	count, ok := snapObj["event_count"].(float64)
+	if !ok {
+		t.Errorf("window_snapshot.event_count must be a number, got %T(%v)", snapObj["event_count"], snapObj["event_count"])
+	} else if int(count) != 7 {
+		t.Errorf("window_snapshot.event_count: want 7, got %v", count)
+	}
 }
 
 // (atomic import retained so go vet doesn't complain in stub builds)

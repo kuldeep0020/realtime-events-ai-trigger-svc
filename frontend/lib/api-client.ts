@@ -21,6 +21,9 @@ import type {
   DemoResetResponse,
   FireScriptRequest,
   FireScriptResponse,
+  SSEEventPayload,
+  SSEWindowPayload,
+  SSETriggerPayload,
 } from "@/types/api";
 import {
   mockGetTrackingPlan,
@@ -218,4 +221,98 @@ export async function demoReset(): Promise<DemoResetResponse> {
     method: "POST",
     body: "{}",
   });
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Dashboard rehydration: recent-events / active-sessions / recent-triggers
+// ──────────────────────────────────────────────────────────────────────────────
+
+// Zod schemas are intentionally permissive (passthrough on unknown keys) so
+// new backend fields don't break validation. Required keys are asserted at
+// the call-site via TypeScript types, not at the schema boundary.
+
+const sseEventPayloadSchema = z
+  .object({
+    type: z.string(),
+    channel: z.string().default(""),
+    event: z.string().optional(),
+    anonymousId: z.string(),
+    userId: z.string().optional(),
+    messageId: z.string(),
+    originalTimestamp: z.string(),
+    properties: z.record(z.string(), z.unknown()).optional(),
+    context: z.record(z.string(), z.unknown()).optional(),
+    traits: z.record(z.string(), z.unknown()).optional(),
+  })
+  .passthrough();
+
+const recentEventsResponseSchema = z.object({
+  events: z.array(sseEventPayloadSchema),
+});
+
+const sseWindowPayloadSchema = z
+  .object({
+    anonymous_id: z.string(),
+    event_count: z.number(),
+    event_type_count: z.record(z.string(), z.number()).default({}),
+    event_name_count: z.record(z.string(), z.number()).default({}),
+    last_seen: z.string().default(""),
+    has_error_event: z.boolean().default(false),
+    idle_seconds: z.number().default(0),
+  })
+  .passthrough();
+
+const activeSessionsResponseSchema = z.object({
+  sessions: z.array(sseWindowPayloadSchema),
+});
+
+const sseTriggerPayloadSchema = z
+  .object({
+    id: z.string(),
+    rule_name: z.string(),
+    persona: z.string(),
+    anonymous_id: z.string(),
+    fired_at: z.string(),
+    window_snapshot: z.record(z.string(), z.unknown()).default({}),
+    llm_parsed: z.record(z.string(), z.unknown()).optional(),
+    destination: z.string(),
+    dispatch_status: z.string(),
+  })
+  .passthrough();
+
+const recentTriggersResponseSchema = z.object({
+  triggers: z.array(sseTriggerPayloadSchema),
+});
+
+/** Returns the most recent N events from the events table (camelCase payload). */
+export async function listRecentEvents(
+  limit = 50
+): Promise<{ events: SSEEventPayload[] }> {
+  if (isMockMode) return { events: [] };
+  return apiFetch(
+    `/api/recent-events?limit=${limit}`,
+    recentEventsResponseSchema
+  ) as Promise<{ events: SSEEventPayload[] }>;
+}
+
+/** Returns all current in-memory window snapshots (snake_case). */
+export async function listActiveSessions(): Promise<{
+  sessions: SSEWindowPayload[];
+}> {
+  if (isMockMode) return { sessions: [] };
+  return apiFetch(
+    "/api/active-sessions",
+    activeSessionsResponseSchema
+  ) as Promise<{ sessions: SSEWindowPayload[] }>;
+}
+
+/** Returns the most recent N trigger rows (SSETriggerPayload wire-shape). */
+export async function listRecentTriggers(
+  limit = 20
+): Promise<{ triggers: SSETriggerPayload[] }> {
+  if (isMockMode) return { triggers: [] };
+  return apiFetch(
+    `/api/recent-triggers?limit=${limit}`,
+    recentTriggersResponseSchema
+  ) as Promise<{ triggers: SSETriggerPayload[] }>;
 }

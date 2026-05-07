@@ -268,6 +268,25 @@ func (s *Store) RunPruner(ctx context.Context, idleTTL time.Duration, every time
 	}
 }
 
+// SnapshotAll returns deep-copied snapshots of every active window across
+// all shards. Useful for dashboard rehydration after a browser refresh.
+// IdleSeconds is populated for each snapshot, mirroring Snapshot().
+func (s *Store) SnapshotAll() []Snapshot {
+	out := make([]Snapshot, 0, s.Active())
+	now := time.Now().UTC()
+	for i := range s.shards {
+		sh := &s.shards[i]
+		sh.mu.RLock()
+		for _, w := range sh.windows {
+			snap := w.snapshot()
+			snap.IdleSeconds = int(snap.IdleFor(now).Seconds())
+			out = append(out, snap)
+		}
+		sh.mu.RUnlock()
+	}
+	return out
+}
+
 // evictGlobalOldest finds the globally least-recently-touched window across
 // all shards and removes it. Returns true if an eviction occurred.
 //

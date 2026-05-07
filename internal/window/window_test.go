@@ -506,6 +506,42 @@ func TestApply_LastSeenUsesReceivedAtNotOriginalTimestamp(t *testing.T) {
 	}
 }
 
+// TestSnapshotAll_ReturnsAllWindows verifies that SnapshotAll returns one
+// snapshot per inserted window with IdleSeconds populated.
+func TestSnapshotAll_ReturnsAllWindows(t *testing.T) {
+	s := New(0)
+	now := time.Now().UTC()
+
+	// Insert 3 windows with known LastSeen values across potentially different shards.
+	ids := []string{"anon-all-001", "anon-all-002", "anon-all-003"}
+	for _, id := range ids {
+		s.WithWindow(id, func(w *UserWindow) {
+			w.EventCount = 1
+			w.LastSeen = now.Add(-5 * time.Second)
+		})
+	}
+
+	snaps := s.SnapshotAll()
+	if len(snaps) != 3 {
+		t.Fatalf("SnapshotAll returned %d snapshots, want 3", len(snaps))
+	}
+
+	seen := map[string]bool{}
+	for _, snap := range snaps {
+		seen[snap.AnonymousID] = true
+		// IdleSeconds must be populated (LastSeen was ~5s ago).
+		if snap.IdleSeconds < 3 {
+			t.Errorf("snap %s: IdleSeconds = %d, want >= 3 (LastSeen was ~5s ago)", snap.AnonymousID, snap.IdleSeconds)
+		}
+	}
+
+	for _, id := range ids {
+		if !seen[id] {
+			t.Errorf("SnapshotAll missing window for %s", id)
+		}
+	}
+}
+
 func TestUpdateNilEventNoop(t *testing.T) {
 	s := New(0)
 	s.Update(nil, time.Time{})

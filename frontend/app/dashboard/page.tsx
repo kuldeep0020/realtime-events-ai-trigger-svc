@@ -98,9 +98,13 @@ function DashboardContent() {
         </div>
 
         {/* Main 3-column dashboard */}
+        {/* forceMount keeps both panels mounted at all times so React state
+            (events, sessions, triggers) and SSE subscriptions survive tab
+            switches. The inactive panel is hidden via data-[state=inactive]. */}
         <TabsContent
           value="dashboard"
-          className="flex-1 overflow-hidden m-0"
+          className="flex-1 overflow-hidden m-0 data-[state=inactive]:hidden"
+          forceMount
         >
           <div className="grid h-full grid-cols-3 divide-x divide-slate-800/60">
             {/* Column 1 — Live events */}
@@ -123,7 +127,8 @@ function DashboardContent() {
         {/* Email outbox tab */}
         <TabsContent
           value="emails"
-          className="flex-1 overflow-hidden m-0"
+          className="flex-1 overflow-hidden m-0 data-[state=inactive]:hidden"
+          forceMount
         >
           <div className="h-full max-w-2xl mx-auto">
             <EmailOutbox />

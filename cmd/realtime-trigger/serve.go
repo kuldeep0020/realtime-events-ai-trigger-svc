@@ -68,6 +68,7 @@ func runServe(args []string) {
 		Pool:        pool,
 		Hub:         rt.hub,
 		Seed:        seedFS,
+		WindowStore: rt.windows,
 		FireScript:  rt.fireScriptHandler,
 		AdminSeed:   rt.adminSeedHandler(seedFS),
 		OnDemoReset: rt.OnDemoReset,

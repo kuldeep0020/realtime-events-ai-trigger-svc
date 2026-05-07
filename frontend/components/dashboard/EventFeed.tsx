@@ -6,7 +6,7 @@
  * Events fade and slide off after 30 seconds. Animate-in via Framer Motion.
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FileText, Navigation, User, Wifi, WifiOff } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useSSEStream } from "@/lib/sse";
+import { listRecentEvents } from "@/lib/api-client";
 import type { SSEEventPayload } from "@/types/api";
 
 interface LiveEvent {
@@ -121,6 +122,47 @@ export function EventFeed({ highlightedIds = new Set(), subscriberCount = 0 }: E
   const [connected, setConnected] = useState(false);
   const [selected, setSelected] = useState<LiveEvent | null>(null);
 
+  // Epoch counter to guard against the initial-fetch/reset race:
+  // if a `reset` SSE arrives while the GET /api/recent-events is still
+  // in-flight, the fetch may resolve after the reset and re-populate state
+  // with stale rows. Incrementing the epoch on every reset and capturing it
+  // before the fetch lets us discard results that belong to a prior era.
+  const resetEpochRef = useRef(0);
+
+  // On mount, seed the event list with recent events from the backend so the
+  // dashboard is populated immediately after a browser refresh or direct URL load.
+  useEffect(() => {
+    const epoch = resetEpochRef.current;
+    listRecentEvents(50)
+      .then((resp) => {
+        if (epoch < resetEpochRef.current) return; // a reset arrived — drop stale result
+        setEvents((prev) => {
+          const seen = new Set(prev.map((e) => e.id));
+          const merged = [...prev];
+          for (const ev of resp.events) {
+            const id = ev.messageId ?? `evt-init-${Date.now()}`;
+            if (!seen.has(id)) {
+              seen.add(id);
+              merged.push({
+                id,
+                payload: ev,
+                // Use originalTimestamp for relative ordering; cap to now so
+                // TTL pruning doesn't immediately discard these seed events.
+                receivedAt: Math.min(
+                  new Date(ev.originalTimestamp).getTime() || Date.now(),
+                  Date.now()
+                ),
+              });
+            }
+          }
+          merged.sort((a, b) => b.receivedAt - a.receivedAt);
+          return merged.slice(0, MAX_VISIBLE);
+        });
+        setConnected(true);
+      })
+      .catch((err) => console.warn("[EventFeed] initial fetch failed:", err));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Prune events older than TTL every 5s
   useEffect(() => {
     const id = setInterval(() => {
@@ -133,7 +175,9 @@ export function EventFeed({ highlightedIds = new Set(), subscriberCount = 0 }: E
   const onMessage = useCallback(
     (msg: { event?: string; data: unknown }) => {
       if (msg.event === "reset") {
-        // Server-side demo reset: clear local event list.
+        // Server-side demo reset: advance epoch so any in-flight initial fetch
+        // is discarded on resolve, then clear local event list.
+        resetEpochRef.current += 1;
         setEvents([]);
         return;
       }

@@ -6,10 +6,11 @@
  * When a trigger fires for a session, the card flashes red→green with a sparkle.
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { useSSEStream } from "@/lib/sse";
+import { listActiveSessions } from "@/lib/api-client";
 import type { SSEWindowPayload } from "@/types/api";
 
 interface WindowEntry {
@@ -132,9 +133,47 @@ interface WindowInspectorProps {
 export function WindowInspector({ triggeredIds = new Set() }: WindowInspectorProps) {
   const [windows, setWindows] = useState<Map<string, WindowEntry>>(new Map());
 
+  // Epoch counter to guard against the initial-fetch/reset race:
+  // if a `reset` SSE arrives while the GET /api/active-sessions is still
+  // in-flight, the fetch may resolve after the reset and re-populate state
+  // with stale rows. Incrementing the epoch on every reset and capturing it
+  // before the fetch lets us discard results that belong to a prior era.
+  const resetEpochRef = useRef(0);
+
+  // On mount, seed the sessions map with active sessions from the backend so
+  // the dashboard rehydrates after a browser refresh without waiting for SSE.
+  useEffect(() => {
+    const epoch = resetEpochRef.current;
+    listActiveSessions()
+      .then((resp) => {
+        if (epoch < resetEpochRef.current) return; // a reset arrived — drop stale result
+        setWindows((prev) => {
+          const next = new Map(prev);
+          for (const snap of resp.sessions) {
+            if (!snap.anonymous_id) continue;
+            // Only insert if the session isn't already present via SSE.
+            if (!next.has(snap.anonymous_id)) {
+              next.set(snap.anonymous_id, {
+                data: snap,
+                updatedAt: snap.last_seen
+                  ? new Date(snap.last_seen).getTime()
+                  : Date.now(),
+              });
+            }
+          }
+          return next;
+        });
+      })
+      .catch((err) =>
+        console.warn("[WindowInspector] initial fetch failed:", err)
+      );
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const onMessage = useCallback((msg: { event?: string; data: unknown }) => {
     if (msg.event === "reset") {
-      // Server-side demo reset: clear all session cards.
+      // Server-side demo reset: advance epoch so any in-flight initial fetch
+      // is discarded on resolve, then clear all session cards.
+      resetEpochRef.current += 1;
       setWindows(new Map());
       return;
     }

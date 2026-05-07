@@ -1,7 +1,20 @@
-# Realtime Events AI Trigger Service — Hackathon Handoff Snapshot
+# Realtime Events AI Triggers — Hackathon Handoff Snapshot
 
-**Snapshot taken**: 2026-05-07 ~21:05 IST (rev 3)
-**Status**: ready to demo to senior leadership. Backend + dashboard fully functional. Two engineer + reviewer pairs have polished the demo through two rounds of QA — first SSE wire-shape alignment (commit `3ef416b`), then 7 demo-quality issues found in user-driven QA (commit `584ddd7`). Latest commit verified end-to-end via Playwright with zero console errors.
+**Snapshot taken**: 2026-05-07 ~23:35 IST (rev 4)
+**Status**: ready to demo to senior leadership. Service renamed to `realtime-events-ai-trigger-svc` (display: "Realtime Events AI Triggers"). Three rounds of engineer + reviewer pairs have polished the demo: SSE wire-shape alignment (`3ef416b`) → 7 demo-quality issues (`584ddd7`) → rename + 3 polish (`8d91d82`) → tab persistence + initial-fetch + race fix (next commit). Demo runbook lives at `docs/DEMO_RUNBOOK.md`.
+
+## Demo polish round 4 (rev 4)
+
+User QA caught 5 more rough edges:
+
+| # | Issue | Fix |
+|---|---|---|
+| Naming | Service didn't convey "events + rolling window" | Renamed go module + helm chart + display name to `realtime-events-ai-trigger-svc` / "Realtime Events AI Triggers". Pulsar subscription literal `realtime-ai-trigger-svc-v1` preserved (offset tracking) |
+| Re-fire pollution | Re-clicking Fire piled events on top of stale window; Slack didn't fire (1h cooldown) | Auto-reset on Fire button click — `Controller.handleFireScript` calls `demoReset()` first, then fires. Failed reset is non-fatal |
+| Same-content emails | Both rs-self rules used the same canned template | New `rs_destination_error` template wired to `onboarding_errored`; `rs_onboarding_stuck` stays on the other rule. Two distinct emails per rs-self run |
+| Fish-shell incompat | `set -a; source .env.local; set +a` is bash-only | Python scripts auto-load `.env.local` via `python-dotenv`. Two-phase argparse: `--env-file` extracted via `parse_known_args` BEFORE full parse so defaults pick up env values |
+| Tab switch wipes state | Radix Tabs unmounts inactive panels | `forceMount` on both `TabsContent` + 3 new GET endpoints (`/api/recent-events`, `/api/active-sessions`, `/api/recent-triggers`) for hydration on browser refresh. Initial-fetch uses epoch-ref to drop results that arrive after a `reset` SSE |
+| Onboarding wizard not in demo path | Audience didn't see how rules get authored | Demo runbook now starts at `/onboarding`. Wizard already worked; just hadn't been documented |
 
 ## Demo-quality fixes (commit `584ddd7`, rev 3)
 
