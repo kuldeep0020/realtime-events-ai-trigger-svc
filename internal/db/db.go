@@ -77,10 +77,10 @@ func RunMigrationsUp(ctx context.Context, pool *pgxpool.Pool, migrationsDir stri
 }
 
 func runMigrations(ctx context.Context, db *sql.DB, migrationsDir string) error {
-	goose.SetBaseFS(nil)
-
 	if migrationsFS != nil {
 		goose.SetBaseFS(migrationsFS)
+	} else {
+		goose.SetBaseFS(nil)
 	}
 
 	if err := goose.SetDialect("postgres"); err != nil {

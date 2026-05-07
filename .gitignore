@@ -1,0 +1,21 @@
+# Go build artifacts
+dist/
+bin/
+realtime-trigger
+
+# Environment files — never commit real secrets
+.env.local
+*.local
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# Test & coverage
+*.test
+*.out
+coverage.html
+
+# macOS
+.DS_Store

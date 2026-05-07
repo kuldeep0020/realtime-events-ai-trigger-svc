@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -295,10 +296,7 @@ func nullableBytes(b []byte) any {
 	return b
 }
 
-// isNoRows returns true for both pgx.ErrNoRows and the stdlib equivalent.
+// isNoRows returns true for both pgx.ErrNoRows and any wrapped variant.
 func isNoRows(err error) bool {
-	if err == nil {
-		return false
-	}
-	return err == pgx.ErrNoRows
+	return errors.Is(err, pgx.ErrNoRows)
 }

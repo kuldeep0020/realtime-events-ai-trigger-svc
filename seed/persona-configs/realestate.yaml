@@ -1,0 +1,36 @@
+persona: realestate
+realtors:
+  - name: "Priya N."
+    suburbs: ["suburb-1", "suburb-2"]
+    hours: "09:00-18:00 IST"
+  - name: "Arjun M."
+    suburbs: ["suburb-3"]
+    hours: "10:00-19:00 IST"
+  - name: "Mira K."
+    suburbs: ["countryside-1", "countryside-2"]
+    hours: "08:00-17:00 IST"
+slack_channel: "realestate-realtor-pings"
+
+rules:
+  - name: realtor_session_abandoned
+    when:
+      all:
+        - window.event_count: { ">=": 3 }
+        - window.event_path_matches: "^/listings(/|$).*"
+        - window.idle_seconds: { ">=": 10 }
+        - window.has_event_type: page
+    fire:
+      action_template: realestate_realtor_pitch
+      destination: "slack:realestate-realtor-pings"
+      cooldown_seconds: 3600
+
+  - name: realtor_high_intent_filter
+    when:
+      all:
+        - window.event_count_of_name: { name: "Listing Viewed", ">=": 2 }
+        - window.event_count_of_name: { name: "Filter Applied", ">=": 1 }
+        - window.property_max: { field: "price", ">=": 1000000 }
+    fire:
+      action_template: realestate_realtor_pitch
+      destination: "slack:realestate-realtor-pings"
+      cooldown_seconds: 7200

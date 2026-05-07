@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "realtime-ai-trigger-svc.fullname" . }}-seed
+  labels:
+    {{- include "realtime-ai-trigger-svc.labels" . | nindent 4 }}
+data:
+  canned-responses-hand.yaml: |
+{{ .Files.Get "files/seed/canned-responses-hand.yaml" | indent 4 }}
+  mock_profiles.yaml: |
+{{ .Files.Get "files/seed/mock_profiles.yaml" | indent 4 }}
+  action-templates.yaml: |
+{{ .Files.Get "files/seed/action-templates.yaml" | indent 4 }}
+  persona-realestate.yaml: |
+{{ .Files.Get "files/seed/persona-configs/realestate.yaml" | indent 4 }}
+  persona-rs-self.yaml: |
+{{ .Files.Get "files/seed/persona-configs/rs-self.yaml" | indent 4 }}
+  tracking-plan-realestate.json: |
+{{ .Files.Get "files/seed/tracking_plans/realestate.json" | indent 4 }}
+  tracking-plan-rs-self.json: |
+{{ .Files.Get "files/seed/tracking_plans/rs-self.json" | indent 4 }}

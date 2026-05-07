@@ -1,0 +1,37 @@
+image:
+  repository: hub.dev-rudder.rudderlabs.com/kuldeep/realtime-ai-trigger-svc
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+env:
+  PULSAR_URL: "pulsar+ssl://pc-0148c683.aws-use1-prod-3u4fn.aws.snio.cloud:6651"
+  PULSAR_TOPIC: "persistent://public/enterprise/source-events-rudderstacvilo"
+  PULSAR_SUBSCRIPTION: "realtime-ai-trigger-svc-v1"
+  POSTGRES_DSN: "postgresql://postuser:postpass@postgres:5432/postdb?sslmode=disable"
+  ALLOWED_WRITE_KEYS: "3DNyjJW7sRSqftUb1UQuMJdxlFw,3DNyveG1sfuVHAV598ESyJza3i3"
+  INGESTION_URL: "https://rudderstacvilo.dev-rudder.rudderlabs.com"
+  LLM_MODE: "canned"
+  KAPA_MODE: "canned"
+  ACTIVATION_MODE: "mock"
+  ACTIVATION_BASE_URL: ""
+  ACTIVATION_DEST_ID: ""
+  LOG_LEVEL: "info"
+
+# Sensitive values — pass at install time via --set secretEnv.*=<value>
+secretEnv:
+  PULSAR_JWT_TOKEN: ""
+  SLACK_WEBHOOK_URL: ""
+  ACTIVATION_SAT: ""
+
+ingress:
+  enabled: false
+  host: "trigger-demo.dev-rudder.rudderlabs.com"
+  tls: false
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 256Mi
+  # limits: intentionally unset per §8.3 — hackathon, single replica

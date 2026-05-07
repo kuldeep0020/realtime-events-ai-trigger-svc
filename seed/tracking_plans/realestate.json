@@ -1,0 +1,47 @@
+{
+  "persona": "realestate",
+  "version": "1.0.0",
+  "description": "Tracking plan for the real-estate demo persona. Events emitted by the browser SDK on the listing portal.",
+  "events": [
+    {
+      "name": "page",
+      "description": "Automatic page-view call emitted by the RudderStack JS SDK on every navigation.",
+      "properties": [
+        { "name": "path",    "type": "string",  "description": "URL path, e.g. /listings or /listings/L112", "required": true },
+        { "name": "url",     "type": "string",  "description": "Full URL including query string",            "required": true },
+        { "name": "title",   "type": "string",  "description": "Document title",                             "required": false },
+        { "name": "referrer","type": "string",  "description": "HTTP referrer",                              "required": false },
+        { "name": "search",  "type": "string",  "description": "Query string portion of the URL",            "required": false }
+      ]
+    },
+    {
+      "name": "Listing Viewed",
+      "description": "Fired when a visitor opens a listing detail page or hovers on a listing card for ≥3 seconds.",
+      "properties": [
+        { "name": "listing_id",       "type": "string",  "description": "Unique listing identifier, e.g. L112",       "required": true },
+        { "name": "suburb",           "type": "string",  "description": "Suburb slug, e.g. suburb-1",                 "required": true },
+        { "name": "price",            "type": "number",  "description": "Asking price in AUD",                        "required": true },
+        { "name": "bedrooms",         "type": "integer", "description": "Number of bedrooms",                         "required": true },
+        { "name": "sq_ft",            "type": "number",  "description": "Floor area in square feet",                  "required": false },
+        { "name": "year_built",       "type": "integer", "description": "Year the property was built",                "required": false },
+        { "name": "listed_days_ago",  "type": "integer", "description": "Days since the listing went live",           "required": false },
+        { "name": "view_count",       "type": "integer", "description": "Total views this listing has received",      "required": false },
+        { "name": "amenities",        "type": "array",   "description": "Array of amenity strings, e.g. pool, garage","required": false },
+        { "name": "agent",            "type": "string",  "description": "Assigned realtor name",                      "required": false }
+      ]
+    },
+    {
+      "name": "Filter Applied",
+      "description": "Fired when the visitor submits a search filter on the listings index page.",
+      "properties": [
+        { "name": "filter_type",    "type": "string",  "description": "Category of filter: search | map | sort",  "required": true },
+        { "name": "suburb",         "type": "string",  "description": "Suburb slug selected in the filter",       "required": false },
+        { "name": "beds_min",       "type": "integer", "description": "Minimum bedroom count filter",             "required": false },
+        { "name": "beds_max",       "type": "integer", "description": "Maximum bedroom count filter",             "required": false },
+        { "name": "price_min",      "type": "number",  "description": "Minimum price filter in AUD",             "required": false },
+        { "name": "price_max",      "type": "number",  "description": "Maximum price filter in AUD",             "required": false },
+        { "name": "results_count",  "type": "integer", "description": "Number of listings returned by the filter","required": false }
+      ]
+    }
+  ]
+}

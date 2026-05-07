@@ -1,0 +1,24 @@
+persona: rs-self
+
+rules:
+  - name: onboarding_errored
+    when:
+      any:
+        - window.has_event_name: "Source Setup Error"
+        - window.has_event_name: "Destination Setup Error"
+        - window.has_event_name: "Webhook Send Error"
+    fire:
+      action_template: rs_onboarding_stuck
+      destination: "email:user"
+      cooldown_seconds: 86400
+
+  - name: onboarding_stuck
+    when:
+      all:
+        - window.has_event_name: "Source Created"
+        - window.event_count_of_name: { name: "Destination Created", "==": 0 }
+        - window.idle_seconds: { ">=": 15 }
+    fire:
+      action_template: rs_onboarding_stuck
+      destination: "email:user"
+      cooldown_seconds: 86400

@@ -1,0 +1,36 @@
+- entity: user
+  id_type: anonymous_id
+  id_value: "anon_demo-re-001"
+  traits:
+    first_seen_at: "2026-04-15T09:23:00Z"
+    last_seen_at: "2026-05-07T08:14:00Z"
+    total_sessions: 12
+    total_listing_views: 47
+    favorite_suburbs: ["suburb-1", "suburb-3"]
+    price_range_min: 1100000
+    price_range_max: 1600000
+    preferred_bedrooms: 3
+    is_repeat_visitor: true
+    inferred_intent: "purchase_within_30d"
+    membership_tier: "browse"
+
+- entity: user
+  id_type: user_id
+  id_value: "demo-rs-001"
+  traits:
+    plan: "free"
+    signup_date: "2026-05-04"
+    company_size: "11-50"
+    tech_stack: ["javascript", "next.js", "amplitude"]
+    onboarding_progress: "destination_setup"
+    last_doc_visited: "/docs/destinations/streaming-destinations/amplitude/"
+    support_tier: "community"
+    setup_minutes_so_far: 27
+
+# Also indexable by anonymousId — the rs-self demo uses identical userId and anonymousId values
+- entity: user
+  id_type: anonymous_id
+  id_value: "demo-rs-001"
+  traits:
+    plan: "free"
+    onboarding_progress: "destination_setup"

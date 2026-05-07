@@ -1,0 +1,67 @@
+canned_llm:
+  - template_name: realestate_realtor_pitch
+    persona: realestate
+    variant: default
+    priority: 100
+    raw_json:
+      headline: "Anonymous visitor abandoned a high-intent session in Suburb 1"
+      talking_points:
+        - "Viewed 3 listings (L101, L107, L112) in suburb-1 — all 3-4BR, $1.2M-$1.5M"
+        - "Applied filter beds_min=3 right after the first listing — knows what they want"
+        - "Spent 22 seconds on L112 detail page before idling — strongest signal"
+      best_cta: "Call within 30 minutes; lead with L112 — matches every filter criterion"
+      urgency: high
+      assigned_realtor: "Priya N."
+
+  - template_name: rs_onboarding_stuck
+    persona: rs-self
+    variant: default
+    priority: 100
+    raw_json:
+      subject: "Stuck on the Amplitude API key error? Here's the fix in 3 steps"
+      body_markdown: |
+        Hi there,
+
+        We noticed you hit `AMP_INVALID_API_KEY` while setting up your Amplitude
+        destination. This usually means the key is correct but pointing to a
+        different Amplitude project, or the key lacks ingestion permissions.
+
+        ### Try this in order
+
+        1. **Verify the key matches the right project.** In Amplitude, go to
+           *Settings → Projects* and confirm the API key column matches what you
+           entered in RudderStack.
+        2. **Check the key's permissions.** Amplitude has separate keys for
+           ingestion vs admin. RudderStack needs the ingestion key (server-side).
+        3. **Test the connection** with the *Test Destination* button after
+           re-pasting the key. A green checkmark confirms credentials are accepted.
+
+        If it's still failing after these three steps, reply with the request ID
+        from the destination error log and we'll get you unstuck same-day.
+
+        — RudderStack
+      doc_links:
+        - title: "Setting up Amplitude as a destination"
+          url: "https://www.rudderstack.com/docs/destinations/streaming-destinations/amplitude/"
+        - title: "Authentication & API keys (Amplitude destination)"
+          url: "https://www.rudderstack.com/docs/destinations/streaming-destinations/amplitude/#connection-settings"
+        - title: "Testing destination connections"
+          url: "https://www.rudderstack.com/docs/dashboard-guides/destinations/#test-destinations"
+      next_step_cta: "Reply with your error log request ID for fast-track help"
+
+canned_kapa:
+  - query_pattern: "Amplitude API key error %"
+    response_json:
+      answer: |
+        The AMP_INVALID_API_KEY error from RudderStack means Amplitude rejected
+        your credentials. Most commonly the key was generated for a different
+        project, or the key has admin-only scope without ingestion. Re-paste the
+        ingestion key from the same Amplitude project and re-test the destination.
+      is_uncertain: false
+      relevant_sources:
+        - title: "Setting up Amplitude as a destination"
+          source_url: "https://www.rudderstack.com/docs/destinations/streaming-destinations/amplitude/"
+        - title: "Authentication & API keys"
+          source_url: "https://www.rudderstack.com/docs/destinations/streaming-destinations/amplitude/#connection-settings"
+        - title: "Testing destination connections"
+          source_url: "https://www.rudderstack.com/docs/dashboard-guides/destinations/#test-destinations"
