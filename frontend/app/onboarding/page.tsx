@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import { Stepper } from "@/components/wizard/Stepper";
+import { UseCaseGallery } from "@/components/wizard/UseCaseGallery";
 import { PersonaPicker } from "@/components/wizard/PersonaPicker";
 import { QAStep } from "@/components/wizard/QAStep";
 import { ConfigPreview } from "@/components/wizard/ConfigPreview";
@@ -12,24 +13,49 @@ import { Separator } from "@/components/ui/separator";
 import { ChevronRight } from "lucide-react";
 import { generateConfig } from "@/lib/api-client";
 import type { Persona, TrackingPlanSpec, GenerateConfigResponse, WizardAnswers } from "@/types/api";
+import type { UseCase } from "@/lib/use-cases";
 
+/**
+ * Internal step constants — decoupled from the stepper's display index.
+ *
+ * STEP_GALLERY (0)   — UseCaseGallery: pick an outcome card
+ * STEP_PERSONA (1)   — PersonaPicker: fallback if user clicks "Or pick by persona →"
+ * STEP_QA     (2)    — QAStep: configure rules (pre-filled when arriving from gallery)
+ * STEP_PREVIEW (3)   — ConfigPreview: review YAML + activate
+ */
+const STEP_GALLERY = 0;
+const STEP_PERSONA = 1;
+const STEP_QA = 2;
+const STEP_PREVIEW = 3;
+
+/**
+ * Visible stepper labels. The gallery and persona-picker share the first step
+ * ("Choose"), so the stepper always shows 3 positions regardless of path.
+ */
 const STEPS = [
-  { id: 1, label: "Choose persona" },
+  { id: 1, label: "Choose" },
   { id: 2, label: "Configure rules" },
   { id: 3, label: "Preview & activate" },
 ];
 
+/** Map internal step → stepper display index (0-based). */
+function stepperIndex(step: number): number {
+  if (step <= STEP_PERSONA) return 0;
+  if (step === STEP_QA) return 1;
+  return 2; // STEP_PREVIEW
+}
+
 /**
- * Three-step onboarding wizard.
- * Step 1 — PersonaPicker: choose real-estate or rs-self
+ * Four-step onboarding wizard.
+ * Step 0 — UseCaseGallery: pick a use-case outcome (new first step)
+ * Step 1 — PersonaPicker: fallback path from gallery's "Or pick by persona →"
  * Step 2 — QAStep: edit canned answers, then click Generate
  * Step 3 — ConfigPreview: review YAML, then Activate & continue → /dashboard
  *
- * A double-click guard on Next prevents race conditions: nextEnabled tracks
- * whether the button is allowed, and advancing is guarded by the current step.
+ * A double-click guard on Next prevents race conditions.
  */
 export default function OnboardingPage() {
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState(STEP_GALLERY);
   const [persona, setPersona] = useState<Persona | null>(null);
   const [trackingPlanSpec, setTrackingPlanSpec] = useState<TrackingPlanSpec | null>(null);
   const [configData, setConfigData] = useState<GenerateConfigResponse | null>(null);
@@ -39,7 +65,27 @@ export default function OnboardingPage() {
   // Guard against double-clicking Next
   const advancingRef = useRef(false);
 
-  const canAdvanceFromStep0 = persona !== null && trackingPlanSpec !== null;
+  // ── Gallery handlers ──────────────────────────────────────────────────────
+
+  /**
+   * User clicked a use-case card. Pre-fill persona from the card and jump
+   * directly to QAStep — PersonaPicker is bypassed.
+   */
+  const handleUseCaseSelect = (useCase: UseCase) => {
+    setPersona(useCase.persona);
+    // Clear any previously loaded tracking plan spec — QAStep drives off persona only
+    setTrackingPlanSpec(null);
+    setStep(STEP_QA);
+  };
+
+  /** User clicked "Or pick by persona →" — fall through to PersonaPicker. */
+  const handleGallerySkip = () => {
+    setStep(STEP_PERSONA);
+  };
+
+  // ── PersonaPicker handlers ────────────────────────────────────────────────
+
+  const canAdvanceFromPersona = persona !== null && trackingPlanSpec !== null;
 
   const handlePersonaSelected = (p: Persona, spec: TrackingPlanSpec) => {
     setPersona(p);
@@ -48,12 +94,13 @@ export default function OnboardingPage() {
 
   const handleNext = () => {
     if (advancingRef.current) return;
-    if (step === 0 && !canAdvanceFromStep0) return;
+    if (step === STEP_PERSONA && !canAdvanceFromPersona) return;
     advancingRef.current = true;
-    setStep((s) => s + 1);
-    // Allow advancing again after a short tick
+    setStep(STEP_QA);
     setTimeout(() => { advancingRef.current = false; }, 200);
   };
+
+  // ── QAStep handlers ───────────────────────────────────────────────────────
 
   const handleQASubmit = async (answers: WizardAnswers) => {
     if (!persona || generating) return;
@@ -62,7 +109,7 @@ export default function OnboardingPage() {
     try {
       const result = await generateConfig({ persona, answers });
       setConfigData(result);
-      setStep(2);
+      setStep(STEP_PREVIEW);
     } catch (err) {
       setGenerateError(err instanceof Error ? err.message : "Failed to generate config");
     } finally {
@@ -71,9 +118,14 @@ export default function OnboardingPage() {
   };
 
   const handleBackToQA = () => {
-    setStep(1);
+    setStep(STEP_QA);
     setConfigData(null);
   };
+
+  // ── Render ────────────────────────────────────────────────────────────────
+
+  const currentStepperIndex = stepperIndex(step);
+  const stepLabel = STEPS[currentStepperIndex]?.label ?? "";
 
   return (
     <div className="flex flex-col min-h-screen bg-slate-950">
@@ -82,7 +134,7 @@ export default function OnboardingPage() {
       <main className="flex-1 flex flex-col p-6 md:p-8 max-w-screen-xl mx-auto w-full">
         {/* Stepper */}
         <div className="mb-8">
-          <Stepper steps={STEPS} current={step} />
+          <Stepper steps={STEPS} current={currentStepperIndex} />
         </div>
 
         {/* Main content: left = wizard step, right = tracking plan panel */}
@@ -91,18 +143,27 @@ export default function OnboardingPage() {
           <section
             className="flex-1 flex flex-col"
             aria-live="polite"
-            aria-label={`Step ${step + 1}: ${STEPS[step].label}`}
+            aria-label={`Step ${currentStepperIndex + 1}: ${stepLabel}`}
           >
-            {step === 0 && (
+            {/* Step 0 — Use-case gallery (new entry point) */}
+            {step === STEP_GALLERY && (
+              <UseCaseGallery
+                onSelect={handleUseCaseSelect}
+                onSkip={handleGallerySkip}
+              />
+            )}
+
+            {/* Step 1 — PersonaPicker (fallback path) */}
+            {step === STEP_PERSONA && (
               <>
                 <PersonaPicker onPersonaSelected={handlePersonaSelected} />
                 <Separator className="bg-slate-800 my-6" />
                 <div className="flex justify-end">
                   <Button
                     onClick={handleNext}
-                    disabled={!canAdvanceFromStep0}
+                    disabled={!canAdvanceFromPersona}
                     className="bg-violet-600 hover:bg-violet-700 text-white disabled:opacity-40 focus-visible:ring-violet-500"
-                    aria-disabled={!canAdvanceFromStep0}
+                    aria-disabled={!canAdvanceFromPersona}
                   >
                     Next
                     <ChevronRight className="w-4 h-4 ml-1" aria-hidden="true" />
@@ -111,7 +172,8 @@ export default function OnboardingPage() {
               </>
             )}
 
-            {step === 1 && persona && (
+            {/* Step 2 — QAStep */}
+            {step === STEP_QA && persona && (
               <>
                 {generateError && (
                   <div role="alert" className="mb-4 rounded-md border border-red-800 bg-red-950/50 px-4 py-3 text-sm text-red-300">
@@ -126,7 +188,8 @@ export default function OnboardingPage() {
               </>
             )}
 
-            {step === 2 && configData && persona && (
+            {/* Step 3 — ConfigPreview */}
+            {step === STEP_PREVIEW && configData && persona && (
               <ConfigPreview
                 data={configData}
                 persona={persona}
@@ -135,8 +198,8 @@ export default function OnboardingPage() {
             )}
           </section>
 
-          {/* Right pane — tracking plan */}
-          {step < 2 && (
+          {/* Right pane — tracking plan (only visible before preview step) */}
+          {step < STEP_PREVIEW && (
             <aside
               className="w-full md:w-80 lg:w-96 rounded-lg border border-slate-800 bg-slate-900/50 flex flex-col"
               aria-label="Tracking plan reference"
