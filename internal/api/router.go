@@ -9,6 +9,7 @@ package api
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -117,6 +118,10 @@ func (s *Server) buildRouter() *chi.Mux {
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
 	r.Use(s.metricsMiddleware)
+	// CORS: allow the Next.js dev server (any localhost port) to call this
+	// API + open SSE streams. Hackathon scope — production should narrow
+	// this to the deployed frontend origin.
+	r.Use(corsAllowLocalhost)
 
 	// Health / readiness / metrics — no /api prefix.
 	r.Get("/healthz", s.handleHealthz)
@@ -148,4 +153,33 @@ func (s *Server) buildRouter() *chi.Mux {
 	})
 
 	return r
+}
+
+// corsAllowLocalhost is a permissive CORS middleware scoped to localhost
+// origins on any port. SSE streams + JSON endpoints both work with it.
+//
+// Hackathon scope: the demo runs entirely on localhost, so allowing any
+// localhost origin is a tight enough boundary. Production deployments
+// should replace this with a strict allow-list of the deployed frontend
+// origin (e.g. https://trigger-demo.dev-rudder.rudderlabs.com) and remove
+// the wildcard branch entirely.
+func corsAllowLocalhost(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+		if origin != "" && (strings.HasPrefix(origin, "http://localhost:") ||
+			strings.HasPrefix(origin, "http://127.0.0.1:") ||
+			strings.HasPrefix(origin, "https://localhost:")) {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Vary", "Origin")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Cache-Control, X-Requested-With")
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			w.Header().Set("Access-Control-Max-Age", "300")
+		}
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
