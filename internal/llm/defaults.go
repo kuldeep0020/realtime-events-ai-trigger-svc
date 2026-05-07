@@ -60,6 +60,17 @@ var defaultRegistry = map[string]map[string]any{
 		"urgency":          "high",
 		"assigned_realtor": "On-call realtor",
 	},
+	TemplateRealestateRealtorAnonymous: {
+		"headline": "Anonymous high-intent visitor abandoned a session",
+		"talking_points": []string{
+			"Visitor browsed multiple listings without identifying themselves",
+			"Filter activity shows clear purchase intent",
+			"Standby realtor can engage via in-app chat or follow-up ad",
+		},
+		"best_cta":                    "Trigger an in-app prompt or retargeting sequence within 15 minutes",
+		"urgency":                     "medium",
+		"assigned_realtor_on_standby": "On-call realtor",
+	},
 	TemplateRSOnboardingStuck: {
 		"subject": "Stuck during onboarding? Here's a quick path forward",
 		"body_markdown": "Hi there,\n\nWe noticed you ran into an issue while setting up " +
@@ -77,6 +88,25 @@ var defaultRegistry = map[string]map[string]any{
 			},
 		},
 		"next_step_cta": "Reply with your error log request ID for fast-track help",
+	},
+	TemplateRSDestinationError: {
+		"subject": "Destination setup error — here's how to resolve it",
+		"body_markdown": "Hi there,\n\nWe detected an error on one of your destinations. " +
+			"Common causes include invalid API credentials or missing permissions.\n\n" +
+			"Steps to fix:\n\n" +
+			"1. Open the destination settings and re-enter your credentials.\n" +
+			"2. Confirm the credentials have the required ingestion permissions.\n" +
+			"3. Click \"Test connection\" — if it passes, you're all set.\n\n" +
+			"If the error persists, share the error code from the destination log " +
+			"and we'll help you resolve it same-day.\n\n" +
+			"— RudderStack",
+		"doc_links": []map[string]string{
+			{
+				"title": "Destination setup guide",
+				"url":   "https://www.rudderstack.com/docs/destinations/",
+			},
+		},
+		"next_step_cta": "Reply with your destination error code for fast-track support",
 	},
 }
 

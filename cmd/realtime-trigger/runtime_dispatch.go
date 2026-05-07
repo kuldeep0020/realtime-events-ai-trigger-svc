@@ -76,6 +76,21 @@ func (rt *runtime) fireMatch(ctx context.Context, m rules.Match, persona string)
 		)
 	}
 
+	// Inject the activation-trait email into the rendered payload so the
+	// MockEmailBackend (which reads `to_email` from parsed JSON, falling back
+	// to "demo@rudderstack.com") writes the correct recipient to the
+	// mock_emails table — keeping the persisted DB row, the SSE publish, and
+	// the OutcomeBanner display consistent. No-op for realestate (Slack)
+	// triggers.
+	if traitEmail, ok := tc.profileData["email"].(string); ok && traitEmail != "" {
+		if renderedParsed == nil {
+			renderedParsed = map[string]any{}
+		}
+		if _, exists := renderedParsed["to_email"]; !exists {
+			renderedParsed["to_email"] = traitEmail
+		}
+	}
+
 	payload := dispatch.NewLLMPayload(result.Template, renderedParsed, result.Raw)
 	dispatchStatus, dispatchedURL, dispatchErr := rt.dispatcher.Dispatch(ctx,
 		m.Fire.Destination, payload, persona, m.Anonymous, m.RuleName,
@@ -148,9 +163,9 @@ func (rt *runtime) fireMatch(ctx context.Context, m rules.Match, persona string)
 			return
 		}
 
-		// Build the links array from doc_links in the parsed LLM result.
+		// Build the links array from doc_links in the rendered LLM result.
 		var links []map[string]any
-		if dl, ok := result.Parsed["doc_links"]; ok && dl != nil {
+		if dl, ok := renderedParsed["doc_links"]; ok && dl != nil {
 			if rawLinks, ok2 := dl.([]any); ok2 {
 				for _, item := range rawLinks {
 					if lm, ok3 := item.(map[string]any); ok3 {
@@ -164,12 +179,20 @@ func (rt *runtime) fireMatch(ctx context.Context, m rules.Match, persona string)
 			}
 		}
 
+		// Prefer the profile's real email address so OutcomeBanner and the
+		// Emails tab outbox row show a consistent recipient. Fall back to the
+		// anonymousId-derived placeholder when the trait is absent.
+		toEmail := m.Anonymous + "@example.com"
+		if traitEmail, ok := tc.profileData["email"].(string); ok && traitEmail != "" {
+			toEmail = traitEmail
+		}
+
 		emailData := map[string]any{
 			"id":            emailID,
 			"trigger_id":    triggerID.String(),
-			"to_email":      m.Anonymous + "@example.com",
-			"subject":       stringFromMap(result.Parsed, "subject"),
-			"body_markdown": stringFromMap(result.Parsed, "body_markdown"),
+			"to_email":      toEmail,
+			"subject":       stringFromMap(renderedParsed, "subject"),
+			"body_markdown": stringFromMap(renderedParsed, "body_markdown"),
 			"created_at":    now.UTC().Format(time.RFC3339),
 		}
 		if len(links) > 0 {

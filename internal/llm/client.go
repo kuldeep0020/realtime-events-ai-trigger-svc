@@ -63,8 +63,10 @@ type ActionResult struct {
 // defaults. Centralising them here prevents drift between seed YAMLs, rule
 // configs, and the fallback registry.
 const (
-	TemplateRealestateRealtorPitch = "realestate_realtor_pitch"
-	TemplateRSOnboardingStuck      = "rs_onboarding_stuck"
+	TemplateRealestateRealtorPitch     = "realestate_realtor_pitch"
+	TemplateRealestateRealtorAnonymous = "realestate_realtor_anonymous"
+	TemplateRSOnboardingStuck          = "rs_onboarding_stuck"
+	TemplateRSDestinationError         = "rs_destination_error"
 )
 
 // Personas referenced by the rule configs.
