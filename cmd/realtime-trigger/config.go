@@ -29,6 +29,10 @@ type runtimeConfig struct {
 	// Tenant filter & write keys
 	AllowedWriteKeys []string
 
+	// Browser CORS: comma-separated full origins (e.g. https://app.example.com).
+	// Empty → only localhost dev origins are allowed by the API middleware.
+	CorsAllowedOrigins []string
+
 	// Demo wiring
 	IngestionURL   string
 	DemoFireTarget string // "pulsar" | "http"
@@ -88,6 +92,15 @@ func loadRuntimeConfig() (runtimeConfig, error) {
 		for _, k := range strings.Split(allowed, ",") {
 			if k = strings.TrimSpace(k); k != "" {
 				cfg.AllowedWriteKeys = append(cfg.AllowedWriteKeys, k)
+			}
+		}
+	}
+
+	corsOrigins := strings.TrimSpace(os.Getenv("CORS_ALLOWED_ORIGINS"))
+	if corsOrigins != "" {
+		for _, o := range strings.Split(corsOrigins, ",") {
+			if o = strings.TrimSpace(o); o != "" {
+				cfg.CorsAllowedOrigins = append(cfg.CorsAllowedOrigins, o)
 			}
 		}
 	}

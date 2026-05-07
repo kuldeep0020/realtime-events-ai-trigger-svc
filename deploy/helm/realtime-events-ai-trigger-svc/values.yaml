@@ -49,3 +49,22 @@ resources:
     cpu: 200m
     memory: 256Mi
   # limits: intentionally unset per §8.3 — hackathon, single replica
+
+
+# Next.js demo UI — separate Deployment/Service; enable in env-specific values (e.g. prod.yaml).
+frontend:
+  enabled: false
+  image:
+    repository: hub.dev-rudder.rudderlabs.com/kuldeep/realtime-events-ai-trigger-frontend
+    tag: "latest"
+    pullPolicy: Always
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+  ingress:
+    enabled: false
+    host: "realtime-events-ai-trigger.dev-rudder.rudderlabs.com"
+    tls: false
+    annotations: {}

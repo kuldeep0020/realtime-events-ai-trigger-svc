@@ -49,3 +49,28 @@ Selector labels — used by Deployment + Service to match pods.
 app.kubernetes.io/name: {{ include "realtime-events-ai-trigger-svc.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
+
+{{/*
+Frontend workload — separate app.kubernetes.io/name so Service selectors never match API pods.
+*/}}
+{{- define "realtime-events-ai-trigger-svc.frontendName" -}}
+{{- printf "%s-frontend" (include "realtime-events-ai-trigger-svc.name" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{- define "realtime-events-ai-trigger-svc.frontendFullname" -}}
+{{- printf "%s-frontend" (include "realtime-events-ai-trigger-svc.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{- define "realtime-events-ai-trigger-svc.frontendSelectorLabels" -}}
+app.kubernetes.io/name: {{ include "realtime-events-ai-trigger-svc.frontendName" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
+
+{{- define "realtime-events-ai-trigger-svc.frontendLabels" -}}
+helm.sh/chart: {{ include "realtime-events-ai-trigger-svc.chart" . }}
+{{ include "realtime-events-ai-trigger-svc.frontendSelectorLabels" . }}
+{{- if .Chart.AppVersion }}
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+{{- end }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- end }}

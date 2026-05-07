@@ -1,3 +1,6 @@
+env:
+  CORS_ALLOWED_ORIGINS: "https://realtime-events-ai-trigger.dev-rudder.rudderlabs.com"
+
 ingress:
   enabled: true
   host: "realtime-events-ai-trigger-api.dev-rudder.rudderlabs.com"
@@ -12,3 +15,19 @@ ingress:
     alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS-1-2-2017-01
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/scheme: internal
+
+frontend:
+  enabled: true
+  ingress:
+    enabled: true
+    host: "realtime-events-ai-trigger.dev-rudder.rudderlabs.com"
+    tls: true
+    annotations:
+      kubernetes.io/ingress.class: "alb"
+      external-dns.alpha.kubernetes.io/hostname: realtime-events-ai-trigger.dev-rudder.rudderlabs.com
+      alb.ingress.kubernetes.io/group.name: monitoring
+      alb.ingress.kubernetes.io/listen-ports: "[{\"HTTPS\":443}]"
+      alb.ingress.kubernetes.io/load-balancer-attributes: routing.http.drop_invalid_header_fields.enabled=true
+      alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS-1-2-2017-01
+      alb.ingress.kubernetes.io/target-type: ip
+      alb.ingress.kubernetes.io/scheme: internal

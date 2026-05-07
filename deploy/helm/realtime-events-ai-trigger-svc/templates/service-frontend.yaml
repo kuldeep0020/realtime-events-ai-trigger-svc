@@ -1,0 +1,17 @@
+{{- if .Values.frontend.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "realtime-events-ai-trigger-svc.frontendFullname" . }}
+  labels:
+    {{- include "realtime-events-ai-trigger-svc.frontendLabels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3001
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "realtime-events-ai-trigger-svc.frontendSelectorLabels" . | nindent 4 }}
+{{- end }}

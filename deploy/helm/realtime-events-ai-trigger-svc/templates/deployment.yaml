@@ -6,6 +6,8 @@ metadata:
     {{- include "realtime-events-ai-trigger-svc.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       {{- include "realtime-events-ai-trigger-svc.selectorLabels" . | nindent 6 }}

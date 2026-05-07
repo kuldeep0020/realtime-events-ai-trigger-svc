@@ -82,6 +82,8 @@ type Server struct {
 	// logger is used for structured server-side logging. Defaults to
 	// slog.Default() when not set in Config.
 	logger *slog.Logger
+	// corsAllowedOrigins holds normalized entries from Config (trimmed, no trailing slash).
+	corsAllowedOrigins []string
 
 	// startedAt records process boot time for /metrics and /healthz.
 	startedAt time.Time
@@ -99,6 +101,10 @@ type Config struct {
 	EngineReloader EngineReloadFunc
 	// Logger is used for structured server-side logging. Nil → slog.Default().
 	Logger *slog.Logger
+
+	// CorsAllowedOrigins lists full browser Origins allowed in addition to localhost
+	// dev URLs (e.g. https://app.example.com). Entries are normalized on New.
+	CorsAllowedOrigins []string
 }
 
 // New builds a Server with the supplied dependencies and wires the chi
@@ -121,6 +127,11 @@ func New(cfg Config) *Server {
 		logger:         logger,
 		metrics:        newMetrics(),
 		startedAt:      time.Now().UTC(),
+	}
+	for _, o := range cfg.CorsAllowedOrigins {
+		if n := normalizeOrigin(o); n != "" {
+			s.corsAllowedOrigins = append(s.corsAllowedOrigins, n)
+		}
 	}
 	if s.hub == nil {
 		s.hub = sse.NewHub()
@@ -147,10 +158,8 @@ func (s *Server) buildRouter() *chi.Mux {
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
 	r.Use(s.metricsMiddleware)
-	// CORS: allow the Next.js dev server (any localhost port) to call this
-	// API + open SSE streams. Hackathon scope — production should narrow
-	// this to the deployed frontend origin.
-	r.Use(corsAllowLocalhost)
+	// CORS: localhost dev origins + optional Config.CorsAllowedOrigins (env-driven in prod).
+	r.Use(s.corsMiddleware)
 
 	// Health / readiness / metrics — no /api prefix.
 	r.Get("/healthz", s.handleHealthz)
@@ -189,20 +198,43 @@ func (s *Server) buildRouter() *chi.Mux {
 	return r
 }
 
-// corsAllowLocalhost is a permissive CORS middleware scoped to localhost
-// origins on any port. SSE streams + JSON endpoints both work with it.
-//
-// Hackathon scope: the demo runs entirely on localhost, so allowing any
-// localhost origin is a tight enough boundary. Production deployments
-// should replace this with a strict allow-list of the deployed frontend
-// origin (e.g. https://trigger-demo.dev-rudder.rudderlabs.com) and remove
-// the wildcard branch entirely.
-func corsAllowLocalhost(next http.Handler) http.Handler {
+func normalizeOrigin(s string) string {
+	s = strings.TrimSpace(s)
+	s = strings.TrimSuffix(s, "/")
+	return s
+}
+
+func (s *Server) originAllowed(origin string) bool {
+	if origin == "" {
+		return false
+	}
+	// Local dev: always allowed, independent of CorsAllowedOrigins / CORS_ALLOWED_ORIGINS.
+	if strings.HasPrefix(origin, "http://localhost:") ||
+		strings.HasPrefix(origin, "http://127.0.0.1:") ||
+		strings.HasPrefix(origin, "https://localhost:") ||
+		strings.HasPrefix(origin, "https://127.0.0.1:") {
+		return true
+	}
+	if origin == "http://localhost" || origin == "https://localhost" ||
+		origin == "http://127.0.0.1" || origin == "https://127.0.0.1" {
+		return true
+	}
+	n := normalizeOrigin(origin)
+	for _, allowed := range s.corsAllowedOrigins {
+		if n == allowed {
+			return true
+		}
+	}
+	return false
+}
+
+// corsMiddleware reflects allowed Origins for JSON and SSE. Localhost and
+// loopback on any port are always allowed; CorsAllowedOrigins adds deployed
+// frontends (normalized exact match).
+func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
-		if origin != "" && (strings.HasPrefix(origin, "http://localhost:") ||
-			strings.HasPrefix(origin, "http://127.0.0.1:") ||
-			strings.HasPrefix(origin, "https://localhost:")) {
+		if s.originAllowed(origin) {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
