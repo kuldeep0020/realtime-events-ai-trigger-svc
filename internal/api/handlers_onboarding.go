@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/db"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/db"
 )
 
 // generateConfigRequest is the body shape for POST /api/onboarding/generate-config.

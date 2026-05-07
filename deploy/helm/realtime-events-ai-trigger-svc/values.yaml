@@ -1,5 +1,5 @@
 image:
-  repository: hub.dev-rudder.rudderlabs.com/kuldeep/realtime-ai-trigger-svc
+  repository: hub.dev-rudder.rudderlabs.com/kuldeep/realtime-events-ai-trigger-svc
   tag: "0.1.0"
   pullPolicy: IfNotPresent
 
@@ -8,6 +8,7 @@ replicaCount: 1
 env:
   PULSAR_URL: "pulsar+ssl://pc-0148c683.aws-use1-prod-3u4fn.aws.snio.cloud:6651"
   PULSAR_TOPIC: "persistent://public/enterprise/source-events-rudderstacvilo"
+  # Pulsar subscription name is decoupled from chart name; keep stable to preserve offset tracking.
   PULSAR_SUBSCRIPTION: "realtime-ai-trigger-svc-v1"
   POSTGRES_DSN: "postgresql://postuser:postpass@postgres:5432/postdb?sslmode=disable"
   ALLOWED_WRITE_KEYS: "3DNyjJW7sRSqftUb1UQuMJdxlFw,3DNyveG1sfuVHAV598ESyJza3i3"

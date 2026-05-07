@@ -11,7 +11,7 @@ import (
 
 	"github.com/apache/pulsar-client-go/pulsar"
 
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/demofire"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/demofire"
 )
 
 // ----------------------------------------------------------------------------

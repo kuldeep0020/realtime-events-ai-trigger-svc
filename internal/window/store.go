@@ -7,7 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/event"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/event"
 )
 
 // shardCount is fixed at 16 (§3.3). Power-of-two enables a fast mask, but FNV

@@ -8,9 +8,9 @@ import (
 
 	"github.com/samber/oops"
 
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/db"
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/kapa"
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/llm"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/db"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/kapa"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/llm"
 )
 
 // LLMRefresher is the subset of llm.Client used by RefreshLiveLLM. The

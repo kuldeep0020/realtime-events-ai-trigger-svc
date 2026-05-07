@@ -6,9 +6,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/api"
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/db"
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/seed"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/api"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/db"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/seed"
 )
 
 // fixtureFS returns a SeedFS whose contents mirror the on-disk seed/ tree.

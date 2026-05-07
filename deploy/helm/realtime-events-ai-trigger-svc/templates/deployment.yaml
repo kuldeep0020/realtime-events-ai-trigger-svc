@@ -1,18 +1,18 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "realtime-ai-trigger-svc.fullname" . }}
+  name: {{ include "realtime-events-ai-trigger-svc.fullname" . }}
   labels:
-    {{- include "realtime-ai-trigger-svc.labels" . | nindent 4 }}
+    {{- include "realtime-events-ai-trigger-svc.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      {{- include "realtime-ai-trigger-svc.selectorLabels" . | nindent 6 }}
+      {{- include "realtime-events-ai-trigger-svc.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "realtime-ai-trigger-svc.selectorLabels" . | nindent 8 }}
+        {{- include "realtime-events-ai-trigger-svc.selectorLabels" . | nindent 8 }}
     spec:
       securityContext:
         runAsNonRoot: true
@@ -60,4 +60,4 @@ spec:
       volumes:
         - name: seed-files
           configMap:
-            name: {{ include "realtime-ai-trigger-svc.fullname" . }}-seed
+            name: {{ include "realtime-events-ai-trigger-svc.fullname" . }}-seed

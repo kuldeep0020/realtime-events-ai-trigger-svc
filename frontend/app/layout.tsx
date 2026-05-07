@@ -10,7 +10,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "RudderStack AI Trigger Demo",
+  title: "Realtime Events AI Triggers",
   description:
     "Real-time AI-powered trigger service — persona onboarding and live dashboard",
 };

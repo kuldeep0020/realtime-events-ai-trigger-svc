@@ -9,10 +9,10 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/event"
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/rules"
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/sse"
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/window"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/event"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/rules"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/sse"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/window"
 )
 
 // TestOnDemoReset_PurgesMemoryState verifies that OnDemoReset clears both the

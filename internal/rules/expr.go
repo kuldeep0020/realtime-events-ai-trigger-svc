@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/window"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/window"
 )
 
 // Expr is the interface every node in the parsed When-tree implements.

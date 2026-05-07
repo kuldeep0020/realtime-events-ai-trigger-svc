@@ -10,8 +10,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/rules"
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/window"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/rules"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/window"
 )
 
 // recordingHandler captures slog records for assertions.

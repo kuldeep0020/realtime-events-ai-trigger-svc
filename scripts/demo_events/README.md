@@ -1,4 +1,4 @@
-# demo_events — Python demo event toolkit
+# demo_events — Python demo event toolkit (realtime-events-ai-trigger-svc)
 
 Publishes rich, realistic RudderStack browser-channel events directly to local
 Pulsar (or the ingestion-svc HTTP endpoint) for demo and soak-test runs.
@@ -18,15 +18,18 @@ Python 3.11+ required. Dependencies: `pulsar-client>=3.5.0`, `faker>=27.0.0`.
 ## Quickstart
 
 ```bash
-# Load env vars (Pulsar URL, JWT token, TLS cert path)
-set -a; source ../../.env.local; set +a
-
 # Single-user realestate flow (~30s, fires realtor_session_abandoned)
+# .env.local is auto-loaded from the repo root — no shell sourcing needed
 uv run demo_realestate.py -v
 
 # Single-user rs-self flow (~12s, fires onboarding_errored + onboarding_stuck)
 uv run demo_rs_self.py -v
 ```
+
+The scripts auto-detect `.env.local` in `scripts/demo_events/` or the repo root,
+so fish-shell users can run them directly. Bash users who have already exported
+vars via `set -a; source .env.local; set +a` continue to work — process env
+takes priority (`override=False`).
 
 ## Common recipes
 
@@ -68,14 +71,24 @@ uv run demo_combined.py --realestate-cohort 2 --rs-self-cohort 2 -v
 
 CLI flags override env vars, which override built-in defaults.
 
+## CLI options (all scripts)
+
+| Flag | Default | Purpose |
+|---|---|---|
+| `--env-file PATH` | auto-detect | Explicit path to `.env` file. Overrides auto-detect. |
+| `--dry-run` | false | Print events as JSON; no publish |
+| `-v` / `--verbose` | false | Debug logging, includes which env file was loaded |
+
 ## Troubleshooting
 
 **TLS handshake error / certificate verify failed**
 - Check `PULSAR_TLS_TRUST_CERTS` points to your actual CA cert.
 - Default path: `/Users/kumar/workspace/pulsar-local-ssl/certs/ca.cert.pem`
 
-**`PULSAR_JWT_TOKEN is not set`**
-- Run `set -a; source ../../.env.local; set +a` before the script.
+**`PULSAR_JWT_TOKEN is not set`** — the script auto-loads `.env.local` from
+  the repo root or from `scripts/demo_events/.env.local`. Confirm one of those
+  exists, or pass `--env-file PATH` explicitly. Manual `set -a; source ...`
+  sourcing is NOT required (and won't work in fish — see `--env-file` instead).
 
 **`pulsar.exceptions.ProducerBusy`**
 - Another producer with the same name is connected. Either wait or set a unique `--producer-name` (not exposed as flag; edit `pulsar_pub.py` `producer_name` default).

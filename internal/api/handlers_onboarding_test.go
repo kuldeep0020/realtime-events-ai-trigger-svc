@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/db"
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/sse"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/db"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/sse"
 )
 
 // openTestPool opens a real pgxpool using TEST_DATABASE_URL and runs

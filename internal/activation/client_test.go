@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/activation"
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/db"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/activation"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/db"
 )
 
 // ─── MockClient (Postgres-backed) ──────────────────────────────────────────

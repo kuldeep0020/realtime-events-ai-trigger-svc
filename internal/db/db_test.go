@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/db"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/db"
 )
 
 // TestPackageCompiles verifies the package compiles and the exported API surface

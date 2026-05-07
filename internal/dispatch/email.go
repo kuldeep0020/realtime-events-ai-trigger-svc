@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/samber/oops"
 
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/db"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/db"
 )
 
 // MockEmailBackend persists "outbound" emails as rows in the mock_emails

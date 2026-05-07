@@ -49,6 +49,42 @@ canned_llm:
           url: "https://www.rudderstack.com/docs/dashboard-guides/destinations/#test-destinations"
       next_step_cta: "Reply with your error log request ID for fast-track help"
 
+  - template_name: rs_destination_error
+    persona: rs-self
+    variant: default
+    priority: 100
+    raw_json:
+      subject: "Quick fix: Amplitude API key error in your destination setup"
+      body_markdown: |
+        Hi there,
+
+        We just saw an `AMP_INVALID_API_KEY` error during your Amplitude destination
+        setup. This is one of the top-3 destination setup errors and is almost
+        always one of these three causes:
+
+        1. **The API key is for a different Amplitude project.** Open Amplitude →
+           *Settings → Projects* and copy the key from the project that should
+           receive the data.
+        2. **The key is admin-only without ingestion permissions.** Amplitude has
+           separate keys for admin actions vs. server-side ingestion. RudderStack
+           needs the ingestion key.
+        3. **A trailing space was copied with the key.** Re-paste with no
+           whitespace and click *Test Destination*.
+
+        You can usually unblock this in under 2 minutes. If the *Test Destination*
+        check still fails after step 3, reply with the request ID from the error
+        log and we'll get you unstuck the same day.
+
+        — RudderStack Onboarding
+      doc_links:
+        - title: "Amplitude destination setup guide"
+          url: "https://www.rudderstack.com/docs/destinations/streaming-destinations/amplitude/"
+        - title: "Amplitude API keys explained"
+          url: "https://www.rudderstack.com/docs/destinations/streaming-destinations/amplitude/#connection-settings"
+        - title: "Test Destination button reference"
+          url: "https://www.rudderstack.com/docs/dashboard-guides/destinations/#test-destinations"
+      next_step_cta: "Reply with your request ID if step 1-3 don't unblock you"
+
 canned_kapa:
   - query_pattern: "Amplitude API key error %"
     response_json:

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/demofire"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/demofire"
 )
 
 // runDemoFire dispatches the persona-specific event sequence either to the

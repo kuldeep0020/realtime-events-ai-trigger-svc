@@ -8,7 +8,7 @@ rules:
         - window.has_event_name: "Destination Setup Error"
         - window.has_event_name: "Webhook Send Error"
     fire:
-      action_template: rs_onboarding_stuck
+      action_template: rs_destination_error
       destination: "email:user"
       cooldown_seconds: 86400
 

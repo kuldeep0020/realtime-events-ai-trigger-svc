@@ -8,7 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/db"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/db"
 )
 
 // runMigrate applies all pending goose migrations against POSTGRES_DSN.

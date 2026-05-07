@@ -1,9 +1,9 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: {{ include "realtime-ai-trigger-svc.fullname" . }}-migrate
+  name: {{ include "realtime-events-ai-trigger-svc.fullname" . }}-migrate
   labels:
-    {{- include "realtime-ai-trigger-svc.labels" . | nindent 4 }}
+    {{- include "realtime-events-ai-trigger-svc.labels" . | nindent 4 }}
   annotations:
     "helm.sh/hook": post-install,post-upgrade
     "helm.sh/hook-weight": "-5"
@@ -13,7 +13,7 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "realtime-ai-trigger-svc.selectorLabels" . | nindent 8 }}
+        {{- include "realtime-events-ai-trigger-svc.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: migrate
     spec:
       restartPolicy: OnFailure

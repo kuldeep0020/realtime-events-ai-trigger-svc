@@ -7,13 +7,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/activation"
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/db"
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/dispatch"
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/llm"
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/rules"
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/sse"
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/window"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/activation"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/db"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/dispatch"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/llm"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/rules"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/sse"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/window"
 )
 
 // fireMatch is invoked once per matched rule. It builds the LLM context,

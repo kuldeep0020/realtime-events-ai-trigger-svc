@@ -1,5 +1,5 @@
 apiVersion: v2
-name: realtime-ai-trigger-svc
+name: realtime-events-ai-trigger-svc
 description: Real-time AI trigger service for RudderStack hackathon demo
 type: application
 version: 0.1.0

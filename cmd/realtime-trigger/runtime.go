@@ -11,18 +11,18 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/activation"
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/api"
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/consumer"
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/demofire"
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/dispatch"
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/filter"
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/kapa"
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/llm"
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/rules"
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/seed"
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/sse"
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/window"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/activation"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/api"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/consumer"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/demofire"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/dispatch"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/filter"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/kapa"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/llm"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/rules"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/seed"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/sse"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/window"
 )
 
 // dispatchItem wraps a Match with its resolved persona for the async

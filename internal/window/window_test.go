@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/event"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/event"
 )
 
 // makeEvent is a tiny helper for synthesising events in tests.

@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/consumer"
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/event"
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/filter"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/consumer"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/event"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/filter"
 )
 
 // makeEvent constructs a minimal ProcessedEvent for testing.

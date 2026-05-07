@@ -16,7 +16,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/sse"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/sse"
 )
 
 // SeedFS abstracts read access to the seed/ directory. Production code uses

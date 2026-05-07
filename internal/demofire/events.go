@@ -18,7 +18,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/event"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/event"
 )
 
 // ScriptStep pairs a relative delay with a fully-formed event.

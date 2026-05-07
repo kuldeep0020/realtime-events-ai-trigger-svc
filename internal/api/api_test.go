@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/sse"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/sse"
 )
 
 // newTestServer wires a Server with a fresh hub and an in-memory SeedFS.

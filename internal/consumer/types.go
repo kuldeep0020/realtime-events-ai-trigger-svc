@@ -6,7 +6,7 @@ package consumer
 import (
 	"time"
 
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/event"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/event"
 )
 
 // ProcessedEvent is the output type of the consumer.Run loop. It carries the

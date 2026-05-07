@@ -1,7 +1,7 @@
 package demofire
 
 import (
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/event"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/event"
 )
 
 // RealestateScript returns the 8-event browser-channel sequence for the

@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/event"
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/window"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/event"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/window"
 )
 
 // realestateConfigYAML mirrors §5.1 of the design doc.

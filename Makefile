@@ -1,6 +1,6 @@
 .PHONY: build test image push migrate seed serve demo-fire-realestate demo-fire-rs-self
 
-IMAGE := hub.dev-rudder.rudderlabs.com/kuldeep/realtime-ai-trigger-svc:0.1.0
+IMAGE := hub.dev-rudder.rudderlabs.com/kuldeep/realtime-events-ai-trigger-svc:0.1.0
 BINARY := ./realtime-trigger
 
 build:

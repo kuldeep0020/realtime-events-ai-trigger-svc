@@ -26,7 +26,7 @@ export function BrandHeader({ className }: BrandHeaderProps) {
         <span className="text-slate-100 font-semibold text-sm tracking-wide">
           RudderStack
         </span>
-        <span className="text-slate-400 text-xs">AI Trigger Demo</span>
+        <span className="text-slate-400 text-xs">Realtime Events AI Triggers</span>
       </div>
     </header>
   );

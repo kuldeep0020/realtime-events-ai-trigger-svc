@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/event"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/event"
 )
 
 // errorPropertyKeys is the small subset of property fields we capture into

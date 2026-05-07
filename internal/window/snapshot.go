@@ -15,7 +15,7 @@ package window
 import (
 	"time"
 
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/event"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/event"
 )
 
 // Snapshot is an immutable, deep-copied view of a UserWindow at a point in

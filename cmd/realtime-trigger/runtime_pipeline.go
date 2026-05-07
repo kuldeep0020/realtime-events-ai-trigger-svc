@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/consumer"
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/db"
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/llm"
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/rules"
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/sse"
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/window"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/consumer"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/db"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/llm"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/rules"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/sse"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/window"
 )
 
 // runPipeline drains consumerOut, applies the filter, updates windows,

@@ -1,5 +1,5 @@
 /**
- * REST API client for the realtime-ai-trigger-svc backend.
+ * REST API client for the realtime-events-ai-trigger-svc backend.
  *
  * When NEXT_PUBLIC_API_BASE is set, all calls go to that origin.
  * When it is absent (empty string / undefined), mock-mode is active:

@@ -21,7 +21,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/samber/oops"
 
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/api"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/api"
 )
 
 // SeedFS is the read-only file abstraction. We re-export the api package's

@@ -23,7 +23,7 @@ Visual: simple before/after diagram — left: events → warehouse → batch ETL
 ## SLIDE 2 — Architecture *(0:45–1:30)*
 
 ```text
-SDK ──► ingestion-svc ──► Pulsar ──► realtime-ai-trigger-svc ──► Slack / Email / Webhook
+SDK ──► ingestion-svc ──► Pulsar ──► realtime-events-ai-trigger-svc ──► Slack / Email / Webhook
                                               │                          ▲
                                               ├─► Postgres event archive │
                                               ├─► Activation API (read)  │

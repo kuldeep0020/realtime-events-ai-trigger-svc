@@ -80,8 +80,16 @@ export function Controller({ compact = false, onPersonaChange }: ControllerProps
         duration: SCRIPT_DURATIONS[persona],
       });
       setActivePersona(persona);
-      setStatusMessage(null);
+      setStatusMessage("Resetting state…");
       onPersonaChange?.(persona);
+
+      try {
+        await demoReset();
+      } catch (err) {
+        // Non-fatal — failed reset should not block the fire.
+        console.warn("auto-reset failed; proceeding with fire", err);
+      }
+
       startProgressAnimation(persona);
 
       try {

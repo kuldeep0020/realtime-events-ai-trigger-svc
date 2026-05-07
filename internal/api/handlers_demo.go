@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/sse"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/sse"
 )
 
 // fireScriptRequest carries the persona to fire. Body schema is small so

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/window"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/window"
 )
 
 // predicateSpec describes a registered predicate: its build (parse-time)

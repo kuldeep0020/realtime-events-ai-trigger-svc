@@ -1,4 +1,4 @@
-# Realtime AI Trigger Service — Hackathon Handoff Snapshot
+# Realtime Events AI Trigger Service — Hackathon Handoff Snapshot
 
 **Snapshot taken**: 2026-05-07 ~21:05 IST (rev 3)
 **Status**: ready to demo to senior leadership. Backend + dashboard fully functional. Two engineer + reviewer pairs have polished the demo through two rounds of QA — first SSE wire-shape alignment (commit `3ef416b`), then 7 demo-quality issues found in user-driven QA (commit `584ddd7`). Latest commit verified end-to-end via Playwright with zero console errors.

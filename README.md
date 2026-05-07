@@ -1,4 +1,4 @@
-# realtime-ai-trigger-svc
+# realtime-events-ai-trigger-svc
 
 A real-time AI trigger service built for a RudderStack internal hackathon. It consumes a Pulsar topic of browser-channel RudderStack events, evaluates hand-authored rules over per-user sliding-window aggregations, enriches trigger context with mock Activation API profiles and canned Kapa.ai knowledge, generates personalized actions via a canned-first LLM client, and dispatches to Slack webhooks or a mock email viewer — all streaming live to a Next.js dashboard via SSE.
 
@@ -57,7 +57,7 @@ The service is a single Go binary (`realtime-trigger`) with four subcommands: `s
                                                           │ Shared sub
                                                           ▼
    ┌─────────────────────────────────────────────────────────────────┐
-   │ realtime-ai-trigger-svc (Go, single-pod)                        │
+   │ realtime-events-ai-trigger-svc (Go, single-pod)                 │
    │                                                                 │
    │  consumer ──► filter/redact ──► window manager (aggregations)   │
    │                                        │                        │

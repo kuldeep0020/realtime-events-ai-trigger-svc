@@ -1,4 +1,4 @@
-module github.com/rudderlabs/realtime-ai-trigger-svc
+module github.com/rudderlabs/realtime-events-ai-trigger-svc
 
 go 1.25.7
 

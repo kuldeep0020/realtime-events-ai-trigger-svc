@@ -7,8 +7,8 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/consumer"
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/event"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/consumer"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/event"
 )
 
 const redactedValue = "[REDACTED]"

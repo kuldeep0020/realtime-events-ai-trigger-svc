@@ -24,6 +24,7 @@ from typing import Any
 
 from faker import Faker
 
+from shared.env import autoload_env
 from shared.event import pretty_print
 from shared.personas import RSUserConfig, make_rs_user_config, rs_self_script
 from shared.pulsar_pub import PulsarPublisher
@@ -44,6 +45,19 @@ DEFAULT_INGESTION_URL = "https://rudderstacvilo.dev-rudder.rudderlabs.com"
 # Arg parsing
 # ---------------------------------------------------------------------------
 
+def _early_parse_env_file(argv: list[str]) -> tuple[str | None, list[str]]:
+    """Pre-extract --env-file BEFORE the full argparse so autoload_env runs first.
+
+    argparse defaults (e.g. os.environ.get("WRITE_KEY_RS_SELF", ...)) resolve
+    against os.environ at parse_args() call time. We must call autoload_env()
+    before that call so env-file values are visible to the defaults.
+    """
+    p = argparse.ArgumentParser(add_help=False)
+    p.add_argument("--env-file", default=None)
+    ns, rest = p.parse_known_args(argv)
+    return ns.env_file, rest
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(
         description="Publish rs-self onboarding demo events to Pulsar or HTTP.",
@@ -59,6 +73,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--speed", type=float, default=1.0)
     p.add_argument("--seed", type=int, default=None)
     p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--env-file", default=None, metavar="PATH",
+                   help="Path to .env file to load (default: auto-detect .env.local)")
     p.add_argument("-v", "--verbose", action="store_true")
     return p.parse_args(argv)
 
@@ -138,11 +154,23 @@ def run_user_flow(
 
 
 def main(argv: list[str] | None = None) -> None:
+    if argv is None:
+        argv = sys.argv[1:]
+    # Phase 1: extract --env-file only, so autoload_env runs before full parse.
+    env_file, _ = _early_parse_env_file(argv)
+    env_path = autoload_env(env_file)
+    # Phase 2: full parse — argparse defaults now see the loaded env.
     args = parse_args(argv)
 
     log_level = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(format="%(asctime)s %(levelname)s %(message)s", level=log_level)
     log = logging.getLogger(__name__)
+
+    if args.verbose:
+        if env_path:
+            log.info("Loaded env from %s", env_path)
+        else:
+            log.info("No .env.local found; using process env")
 
     seed = args.seed
     master_rng = random.Random(seed)

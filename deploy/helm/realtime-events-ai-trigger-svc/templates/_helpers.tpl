@@ -1,7 +1,7 @@
 {{/*
 Expand the name of the chart.
 */}}
-{{- define "realtime-ai-trigger-svc.name" -}}
+{{- define "realtime-events-ai-trigger-svc.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
@@ -10,7 +10,7 @@ Create a default fully qualified app name.
 We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
 If release name contains chart name it will be used as a full name.
 */}}
-{{- define "realtime-ai-trigger-svc.fullname" -}}
+{{- define "realtime-events-ai-trigger-svc.fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -26,16 +26,16 @@ If release name contains chart name it will be used as a full name.
 {{/*
 Create chart label.
 */}}
-{{- define "realtime-ai-trigger-svc.chart" -}}
+{{- define "realtime-events-ai-trigger-svc.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Common labels — applied to every resource.
 */}}
-{{- define "realtime-ai-trigger-svc.labels" -}}
-helm.sh/chart: {{ include "realtime-ai-trigger-svc.chart" . }}
-{{ include "realtime-ai-trigger-svc.selectorLabels" . }}
+{{- define "realtime-events-ai-trigger-svc.labels" -}}
+helm.sh/chart: {{ include "realtime-events-ai-trigger-svc.chart" . }}
+{{ include "realtime-events-ai-trigger-svc.selectorLabels" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
@@ -45,7 +45,7 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{/*
 Selector labels — used by Deployment + Service to match pods.
 */}}
-{{- define "realtime-ai-trigger-svc.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "realtime-ai-trigger-svc.name" . }}
+{{- define "realtime-events-ai-trigger-svc.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "realtime-events-ai-trigger-svc.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}

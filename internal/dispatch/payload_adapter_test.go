@@ -3,7 +3,7 @@ package dispatch_test
 import (
 	"testing"
 
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/dispatch"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/dispatch"
 )
 
 func TestLLMPayload_RoundTrip(t *testing.T) {

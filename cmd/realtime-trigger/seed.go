@@ -9,11 +9,11 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/api"
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/db"
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/kapa"
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/llm"
-	"github.com/rudderlabs/realtime-ai-trigger-svc/internal/seed"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/api"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/db"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/kapa"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/llm"
+	"github.com/rudderlabs/realtime-events-ai-trigger-svc/internal/seed"
 )
 
 // runSeed invokes the seed loader against POSTGRES_DSN.
