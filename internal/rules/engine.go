@@ -167,6 +167,18 @@ func (e *Engine) evaluate(snap window.Snapshot, persona string, now time.Time, t
 	return matches
 }
 
+// PurgeCooldowns clears all in-memory cooldown state. It is a no-op when the
+// configured CooldownGate does not implement the Resetter interface (e.g. a
+// future Postgres-backed gate would purge its own cache differently). Returns
+// the number of entries cleared (0 for non-Resetter gates).
+func (e *Engine) PurgeCooldowns() int {
+	type resetter interface{ Reset() int }
+	if r, ok := e.cooldown.(resetter); ok {
+		return r.Reset()
+	}
+	return 0
+}
+
 // --- In-memory cooldown gate ----------------------------------------------
 
 // MemoryCooldownGate is a process-local CooldownGate implementation suitable
@@ -232,6 +244,17 @@ func (g *MemoryCooldownGate) Purge(now time.Time) int {
 			n++
 		}
 	}
+	return n
+}
+
+// Reset clears all gate entries unconditionally. Intended for demo-reset
+// paths where the in-memory state must mirror a freshly-wiped Postgres
+// cooldowns table.
+func (g *MemoryCooldownGate) Reset() int {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	n := len(g.state)
+	g.state = map[gateKey]time.Time{}
 	return n
 }
 

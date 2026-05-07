@@ -201,6 +201,25 @@ func (s *Store) Prune(olderThan time.Duration) int {
 	return removed
 }
 
+// Reset drops all window data from every shard and resets the active counter
+// to zero. Intended for demo-reset paths where stale aggregations must not
+// pollute the next demo run. Returns the number of windows discarded.
+// Concurrent callers (e.g. the idle ticker) will see empty shards and create
+// new windows on next access.
+func (s *Store) Reset() int {
+	var total int
+	for i := range s.shards {
+		sh := &s.shards[i]
+		sh.mu.Lock()
+		n := len(sh.windows)
+		sh.windows = make(map[string]*UserWindow)
+		total += n
+		sh.mu.Unlock()
+	}
+	s.active.Store(0)
+	return total
+}
+
 // Active returns the current count of resident windows. Atomic snapshot;
 // concurrent inserts/evictions may make it slightly stale.
 func (s *Store) Active() int {

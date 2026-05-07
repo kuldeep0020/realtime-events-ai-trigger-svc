@@ -116,7 +116,22 @@ func (s *Server) handleDemoReset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"status": "reset"})
+	resp := map[string]any{"status": "reset"}
+	if s.onDemoReset != nil {
+		// Use a fresh context — the DB tx context is already spent.
+		resetCtx, resetCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer resetCancel()
+		cooldownsCleared, windowsCleared, resetErr := s.onDemoReset(resetCtx)
+		if resetErr != nil {
+			// Non-fatal: PG state is already clean. Log and surface in response.
+			resp["in_memory_reset_error"] = resetErr.Error()
+		} else {
+			resp["cooldowns_cleared"] = cooldownsCleared
+			resp["windows_cleared"] = windowsCleared
+		}
+	}
+
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // replayLastTriggerResponse mirrors the JSONB shape we emit on the

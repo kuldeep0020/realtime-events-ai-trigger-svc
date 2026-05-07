@@ -39,6 +39,12 @@ type FireScriptFunc func(ctx context.Context, persona string) (int, error)
 // Stage 1 ships a 501 stub; the wired version calls seed.Seeder.LoadAll.
 type AdminSeedFunc func(ctx context.Context) error
 
+// DemoResetFunc is the optional callback invoked by POST /api/demo/reset after
+// the Postgres state has been cleared. It purges any in-memory engine state
+// (cooldown gate, window store) so the next demo run starts clean. Returns the
+// number of cooldown entries and windows cleared.
+type DemoResetFunc func(ctx context.Context) (cooldownsCleared, windowsCleared int, err error)
+
 // Server wires the API. Construct via New, then mount via Handler().
 type Server struct {
 	pool   *pgxpool.Pool
@@ -55,17 +61,21 @@ type Server struct {
 	// adminSeed is invoked by handleAdminSeed when set. Nil → 501 stub.
 	adminSeed AdminSeedFunc
 
+	// onDemoReset is invoked after the PG truncate in handleDemoReset. Nil → skip.
+	onDemoReset DemoResetFunc
+
 	// startedAt records process boot time for /metrics and /healthz.
 	startedAt time.Time
 }
 
 // Config wires runtime options.
 type Config struct {
-	Pool       *pgxpool.Pool
-	Hub        *sse.Hub
-	Seed       SeedFS
-	FireScript FireScriptFunc
-	AdminSeed  AdminSeedFunc
+	Pool        *pgxpool.Pool
+	Hub         *sse.Hub
+	Seed        SeedFS
+	FireScript  FireScriptFunc
+	AdminSeed   AdminSeedFunc
+	OnDemoReset DemoResetFunc
 }
 
 // New builds a Server with the supplied dependencies and wires the chi
@@ -73,13 +83,14 @@ type Config struct {
 // endpoints; in that case those endpoints return 503.
 func New(cfg Config) *Server {
 	s := &Server{
-		pool:       cfg.Pool,
-		hub:        cfg.Hub,
-		seed:       cfg.Seed,
-		fireScript: cfg.FireScript,
-		adminSeed:  cfg.AdminSeed,
-		metrics:    newMetrics(),
-		startedAt:  time.Now().UTC(),
+		pool:        cfg.Pool,
+		hub:         cfg.Hub,
+		seed:        cfg.Seed,
+		fireScript:  cfg.FireScript,
+		adminSeed:   cfg.AdminSeed,
+		onDemoReset: cfg.OnDemoReset,
+		metrics:     newMetrics(),
+		startedAt:   time.Now().UTC(),
 	}
 	if s.hub == nil {
 		s.hub = sse.NewHub()
