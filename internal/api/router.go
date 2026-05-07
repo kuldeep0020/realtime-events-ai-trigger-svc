@@ -7,6 +7,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"time"
 
@@ -29,6 +30,15 @@ type SeedFS interface {
 	ReadFile(path string) ([]byte, error)
 }
 
+// FireScriptFunc is the optional callback invoked by POST /api/demo/fire-script.
+// Stage 1 ships a 501 stub; stage 3 wiring sets this to a real demo-fire
+// invocation. The function returns the count of events sent.
+type FireScriptFunc func(ctx context.Context, persona string) (int, error)
+
+// AdminSeedFunc is the optional callback invoked by POST /api/admin/seed.
+// Stage 1 ships a 501 stub; the wired version calls seed.Seeder.LoadAll.
+type AdminSeedFunc func(ctx context.Context) error
+
 // Server wires the API. Construct via New, then mount via Handler().
 type Server struct {
 	pool   *pgxpool.Pool
@@ -39,15 +49,23 @@ type Server struct {
 	// the Prometheus client lib out of the hackathon binary.
 	metrics *metrics
 
+	// fireScript is invoked by handleFireScript when set. Nil → 501 stub.
+	fireScript FireScriptFunc
+
+	// adminSeed is invoked by handleAdminSeed when set. Nil → 501 stub.
+	adminSeed AdminSeedFunc
+
 	// startedAt records process boot time for /metrics and /healthz.
 	startedAt time.Time
 }
 
 // Config wires runtime options.
 type Config struct {
-	Pool *pgxpool.Pool
-	Hub  *sse.Hub
-	Seed SeedFS
+	Pool       *pgxpool.Pool
+	Hub        *sse.Hub
+	Seed       SeedFS
+	FireScript FireScriptFunc
+	AdminSeed  AdminSeedFunc
 }
 
 // New builds a Server with the supplied dependencies and wires the chi
@@ -55,11 +73,13 @@ type Config struct {
 // endpoints; in that case those endpoints return 503.
 func New(cfg Config) *Server {
 	s := &Server{
-		pool:      cfg.Pool,
-		hub:       cfg.Hub,
-		seed:      cfg.Seed,
-		metrics:   newMetrics(),
-		startedAt: time.Now().UTC(),
+		pool:       cfg.Pool,
+		hub:        cfg.Hub,
+		seed:       cfg.Seed,
+		fireScript: cfg.FireScript,
+		adminSeed:  cfg.AdminSeed,
+		metrics:    newMetrics(),
+		startedAt:  time.Now().UTC(),
 	}
 	if s.hub == nil {
 		s.hub = sse.NewHub()

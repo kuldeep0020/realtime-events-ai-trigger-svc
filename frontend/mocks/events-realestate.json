@@ -1,0 +1,114 @@
+[
+  {
+    "type": "identify",
+    "channel": "browser",
+    "anonymousId": "anon_demo-re-001",
+    "messageId": "msg-re-001",
+    "originalTimestamp": "2026-05-07T08:00:00.000Z",
+    "sentAt": "2026-05-07T08:00:00.000Z",
+    "traits": { "membership_tier": "browse" },
+    "context": { "library": { "name": "analytics-js", "version": "3.5.0" } }
+  },
+  {
+    "type": "page",
+    "channel": "browser",
+    "anonymousId": "anon_demo-re-001",
+    "messageId": "msg-re-002",
+    "originalTimestamp": "2026-05-07T08:00:02.000Z",
+    "sentAt": "2026-05-07T08:00:02.000Z",
+    "properties": {
+      "path": "/listings",
+      "url": "https://realestate-demo.example/listings",
+      "title": "All listings",
+      "referrer": "https://google.com"
+    },
+    "context": {
+      "library": { "name": "analytics-js", "version": "3.5.0" },
+      "campaign": { "utm_source": "google", "utm_medium": "cpc", "utm_campaign": "spring-2026-suburb1" }
+    }
+  },
+  {
+    "type": "track",
+    "channel": "browser",
+    "event": "Listing Viewed",
+    "anonymousId": "anon_demo-re-001",
+    "messageId": "msg-re-003",
+    "originalTimestamp": "2026-05-07T08:00:05.000Z",
+    "sentAt": "2026-05-07T08:00:05.000Z",
+    "properties": {
+      "listing_id": "L101",
+      "suburb": "suburb-1",
+      "price": 1200000,
+      "bedrooms": 3,
+      "sq_ft": 2100,
+      "year_built": 2015,
+      "agent": "Priya N.",
+      "listed_days_ago": 12
+    }
+  },
+  {
+    "type": "track",
+    "channel": "browser",
+    "event": "Filter Applied",
+    "anonymousId": "anon_demo-re-001",
+    "messageId": "msg-re-004",
+    "originalTimestamp": "2026-05-07T08:00:09.000Z",
+    "sentAt": "2026-05-07T08:00:09.000Z",
+    "properties": {
+      "filter_type": "search",
+      "beds_min": 3,
+      "suburb": "suburb-1",
+      "price_min": 1000000,
+      "price_max": 1800000,
+      "results_count": 24
+    }
+  },
+  {
+    "type": "track",
+    "channel": "browser",
+    "event": "Listing Viewed",
+    "anonymousId": "anon_demo-re-001",
+    "messageId": "msg-re-005",
+    "originalTimestamp": "2026-05-07T08:00:13.000Z",
+    "sentAt": "2026-05-07T08:00:13.000Z",
+    "properties": {
+      "listing_id": "L107",
+      "suburb": "suburb-1",
+      "price": 1500000,
+      "bedrooms": 4,
+      "sq_ft": 2400,
+      "amenities": ["pool", "garage_2", "garden"]
+    }
+  },
+  {
+    "type": "track",
+    "channel": "browser",
+    "event": "Listing Viewed",
+    "anonymousId": "anon_demo-re-001",
+    "messageId": "msg-re-006",
+    "originalTimestamp": "2026-05-07T08:00:17.000Z",
+    "sentAt": "2026-05-07T08:00:17.000Z",
+    "properties": {
+      "listing_id": "L112",
+      "suburb": "suburb-1",
+      "price": 1350000,
+      "bedrooms": 3,
+      "sq_ft": 2200,
+      "listed_days_ago": 4,
+      "view_count": 125
+    }
+  },
+  {
+    "type": "page",
+    "channel": "browser",
+    "anonymousId": "anon_demo-re-001",
+    "messageId": "msg-re-007",
+    "originalTimestamp": "2026-05-07T08:00:20.000Z",
+    "sentAt": "2026-05-07T08:00:20.000Z",
+    "properties": {
+      "path": "/listings/L112",
+      "url": "https://realestate-demo.example/listings/L112",
+      "title": "L112 - Park Avenue, Suburb 1"
+    }
+  }
+]

@@ -1,0 +1,30 @@
+{
+  "id": "550e8400-e29b-41d4-a716-446655440001",
+  "rule_name": "realtor_session_abandoned",
+  "persona": "realestate",
+  "anonymous_id": "anon_demo-re-001",
+  "fired_at": "2026-05-07T08:00:32.000Z",
+  "window_snapshot": {
+    "event_count": 7,
+    "event_type_count": { "identify": 1, "page": 2, "track": 4 },
+    "event_name_count": { "Listing Viewed": 3, "Filter Applied": 1 },
+    "distinct_paths": { "/listings": 1, "/listings/L112": 1 },
+    "path_latest": "/listings/L112",
+    "property_max_num": { "price": 1500000, "bedrooms": 4 },
+    "has_error_event": false,
+    "idle_seconds": 12
+  },
+  "llm_parsed": {
+    "headline": "Anonymous visitor abandoned a high-intent session in Suburb 1",
+    "talking_points": [
+      "Viewed 3 listings (L101, L107, L112) in suburb-1 — all 3-4BR, $1.2M-$1.5M",
+      "Applied filter beds_min=3 right after the first listing — knows what they want",
+      "Spent 22 seconds on L112 detail page before idling — strongest signal"
+    ],
+    "best_cta": "Call within 30 minutes; lead with L112 — matches every filter criterion",
+    "urgency": "high",
+    "assigned_realtor": "Priya N."
+  },
+  "destination": "slack:realestate-realtor-pings",
+  "dispatch_status": "sent"
+}

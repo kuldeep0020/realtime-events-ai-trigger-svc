@@ -1,0 +1,56 @@
+[
+  {
+    "type": "identify",
+    "channel": "browser",
+    "anonymousId": "demo-rs-001",
+    "userId": "demo-rs-001",
+    "messageId": "msg-rs-001",
+    "originalTimestamp": "2026-05-07T08:00:00.000Z",
+    "sentAt": "2026-05-07T08:00:00.000Z",
+    "traits": { "plan": "free", "company": "Acme", "role": "engineer" },
+    "context": { "library": { "name": "analytics-js", "version": "3.5.0" } }
+  },
+  {
+    "type": "track",
+    "channel": "browser",
+    "event": "Account Created",
+    "anonymousId": "demo-rs-001",
+    "userId": "demo-rs-001",
+    "messageId": "msg-rs-002",
+    "originalTimestamp": "2026-05-07T08:00:03.000Z",
+    "sentAt": "2026-05-07T08:00:03.000Z",
+    "properties": { "plan": "free", "source": "signup_page" }
+  },
+  {
+    "type": "track",
+    "channel": "browser",
+    "event": "Source Created",
+    "anonymousId": "demo-rs-001",
+    "userId": "demo-rs-001",
+    "messageId": "msg-rs-003",
+    "originalTimestamp": "2026-05-07T08:00:06.000Z",
+    "sentAt": "2026-05-07T08:00:06.000Z",
+    "properties": {
+      "source_type": "javascript",
+      "source_name": "Production Web",
+      "elapsed_seconds_in_setup": 87
+    }
+  },
+  {
+    "type": "track",
+    "channel": "browser",
+    "event": "Destination Setup Error",
+    "anonymousId": "demo-rs-001",
+    "userId": "demo-rs-001",
+    "messageId": "msg-rs-004",
+    "originalTimestamp": "2026-05-07T08:00:10.000Z",
+    "sentAt": "2026-05-07T08:00:10.000Z",
+    "properties": {
+      "destination_type": "Amplitude",
+      "step": "credentials_validation",
+      "error_code": "AMP_INVALID_API_KEY",
+      "error_message": "Provided API key was rejected by Amplitude (HTTP 401)",
+      "elapsed_seconds_in_step": 134
+    }
+  }
+]

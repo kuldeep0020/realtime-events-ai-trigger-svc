@@ -5,21 +5,75 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 )
 
-// handleFireScript is a 501 stub. The actual demo-firing path lives in
-// internal/demofire/ (WP-F). When wired, this handler dispatches the
-// persona-specific event sequence to INGESTION_URL/v1/batch.
+// fireScriptRequest carries the persona to fire. Body schema is small so
+// we accept it via either JSON body or query string for ergonomics.
+type fireScriptRequest struct {
+	Persona string `json:"persona"`
+}
+
+// handleFireScript invokes the configured FireScript callback for the
+// requested persona. Returns 501 when no callback is wired (stage 1 stub).
 //
-// TODO(WP-F): wire into internal/demofire/ once that package lands.
-func (s *Server) handleFireScript(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusNotImplemented, map[string]any{
-		"error":  "demo fire-script not yet wired",
-		"status": "stub",
-		"todo":   "WP-F internal/demofire/",
+// The handler runs Fire in a fresh context derived from a server-side
+// timeout — NOT r.Context() — because the demo script outlives the HTTP
+// request (browser disconnects when the user moves to another tab). We
+// deliberately let the script complete server-side so the dashboard SSE
+// streams pick up every event.
+func (s *Server) handleFireScript(w http.ResponseWriter, r *http.Request) {
+	if s.fireScript == nil {
+		writeJSON(w, http.StatusNotImplemented, map[string]any{
+			"error":  "demo fire-script not yet wired",
+			"status": "stub",
+			"todo":   "wire FireScript via api.Config",
+		})
+		return
+	}
+
+	persona := strings.TrimSpace(r.URL.Query().Get("persona"))
+	if persona == "" {
+		// Accept JSON body as fallback.
+		var req fireScriptRequest
+		if r.Body != nil && r.ContentLength != 0 {
+			if !decodeJSON(w, r, &req) {
+				return
+			}
+			persona = strings.TrimSpace(req.Persona)
+		}
+	}
+	if persona == "" {
+		writeError(w, http.StatusBadRequest, "persona is required (query string or JSON body)")
+		return
+	}
+	persona = strings.ToLower(persona)
+	if persona == "rsself" || persona == "rs_self" {
+		persona = "rs-self"
+	}
+	if persona != "realestate" && persona != "rs-self" {
+		writeError(w, http.StatusBadRequest, "unsupported persona: "+persona)
+		return
+	}
+
+	// Detached context: the demo script is ~32 seconds; we don't want a
+	// browser disconnect to abort it. We respect a max wall-clock cap so
+	// runaway invocations don't leak goroutines.
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	count, err := s.fireScript(ctx, persona)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "fire-script failed: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"persona":     persona,
+		"event_count": count,
+		"status":      "fired",
 	})
 }
 

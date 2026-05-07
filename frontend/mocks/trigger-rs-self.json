@@ -1,0 +1,42 @@
+{
+  "id": "550e8400-e29b-41d4-a716-446655440002",
+  "rule_name": "onboarding_errored",
+  "persona": "rs-self",
+  "anonymous_id": "demo-rs-001",
+  "fired_at": "2026-05-07T08:00:12.000Z",
+  "window_snapshot": {
+    "event_count": 4,
+    "event_type_count": { "identify": 1, "track": 3 },
+    "event_name_count": {
+      "Account Created": 1,
+      "Source Created": 1,
+      "Destination Setup Error": 1
+    },
+    "has_error_event": true,
+    "last_error_event": {
+      "messageId": "msg-rs-004",
+      "eventName": "Destination Setup Error",
+      "properties": {
+        "destination_type": "Amplitude",
+        "error_code": "AMP_INVALID_API_KEY"
+      }
+    }
+  },
+  "llm_parsed": {
+    "subject": "Stuck on the Amplitude API key error? Here's the fix in 3 steps",
+    "body_markdown": "Hi there,\n\nWe noticed you hit `AMP_INVALID_API_KEY` while setting up your Amplitude destination. This usually means the key is correct but pointing to a different Amplitude project, or the key lacks ingestion permissions.\n\n### Try this in order\n\n1. **Verify the key matches the right project.** In Amplitude, go to *Settings → Projects* and confirm the API key column matches what you entered in RudderStack.\n2. **Check the key's permissions.** Amplitude has separate keys for ingestion vs admin. RudderStack needs the ingestion key (server-side).\n3. **Test the connection** with the *Test Destination* button after re-pasting the key. A green checkmark confirms credentials are accepted.\n\nIf it's still failing after these three steps, reply with the request ID from the destination error log and we'll get you unstuck same-day.\n\n— RudderStack",
+    "doc_links": [
+      {
+        "title": "Setting up Amplitude as a destination",
+        "url": "https://www.rudderstack.com/docs/destinations/streaming-destinations/amplitude/"
+      },
+      {
+        "title": "Authentication & API keys (Amplitude destination)",
+        "url": "https://www.rudderstack.com/docs/destinations/streaming-destinations/amplitude/#connection-settings"
+      }
+    ],
+    "next_step_cta": "Reply with your error log request ID for fast-track help"
+  },
+  "destination": "email:user",
+  "dispatch_status": "sent"
+}

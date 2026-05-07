@@ -1,0 +1,71 @@
+{
+  "persona": "rs-self",
+  "spec": {
+    "persona": "rs-self",
+    "version": "1.0.0",
+    "description": "Tracking plan for the RS-self (RudderStack onboarding) demo persona. Events emitted by the RudderStack dashboard application.",
+    "events": [
+      {
+        "name": "Account Created",
+        "description": "Fired once when a new workspace is provisioned, immediately after email verification.",
+        "properties": [
+          { "name": "plan",    "type": "string", "description": "Subscription plan at signup, e.g. free",        "required": true },
+          { "name": "source",  "type": "string", "description": "Acquisition channel, e.g. signup_page, invite", "required": true },
+          { "name": "company", "type": "string", "description": "Company name from the signup form",             "required": false },
+          { "name": "role",    "type": "string", "description": "User role: engineer | analyst | admin",         "required": false }
+        ]
+      },
+      {
+        "name": "Source Created",
+        "description": "Fired when a user successfully creates and saves a new source in the dashboard.",
+        "properties": [
+          { "name": "source_type",              "type": "string",  "description": "SDK/source type, e.g. javascript, node, ios", "required": true },
+          { "name": "source_name",              "type": "string",  "description": "User-provided display name for the source",   "required": true },
+          { "name": "elapsed_seconds_in_setup", "type": "integer", "description": "Total seconds spent in the setup wizard",     "required": false }
+        ]
+      },
+      {
+        "name": "Destination Created",
+        "description": "Fired when a user successfully creates and saves a new destination, before any connection test.",
+        "properties": [
+          { "name": "destination_type",         "type": "string",  "description": "Destination type, e.g. Amplitude, BigQuery", "required": true },
+          { "name": "destination_name",         "type": "string",  "description": "User-provided display name",                 "required": true },
+          { "name": "elapsed_seconds_in_setup", "type": "integer", "description": "Seconds spent in the setup wizard",          "required": false }
+        ]
+      },
+      {
+        "name": "Source Setup Error",
+        "description": "Fired when an error occurs during source setup or test — e.g. write-key validation fails.",
+        "properties": [
+          { "name": "source_type",             "type": "string",  "description": "SDK/source type",                       "required": true },
+          { "name": "step",                    "type": "string",  "description": "Wizard step where the error occurred",  "required": true },
+          { "name": "error_code",              "type": "string",  "description": "Machine-readable error identifier",     "required": true },
+          { "name": "error_message",           "type": "string",  "description": "Human-readable error description",      "required": false },
+          { "name": "elapsed_seconds_in_step", "type": "integer", "description": "Seconds spent on the failing step",     "required": false }
+        ]
+      },
+      {
+        "name": "Destination Setup Error",
+        "description": "Fired when an error occurs during destination setup — e.g. credentials rejected by the downstream service.",
+        "properties": [
+          { "name": "destination_type",        "type": "string",  "description": "Destination type, e.g. Amplitude",      "required": true },
+          { "name": "step",                    "type": "string",  "description": "Wizard step where the error occurred",  "required": true },
+          { "name": "error_code",              "type": "string",  "description": "Machine-readable error identifier, e.g. AMP_INVALID_API_KEY", "required": true },
+          { "name": "error_message",           "type": "string",  "description": "Human-readable description",            "required": false },
+          { "name": "elapsed_seconds_in_step", "type": "integer", "description": "Seconds spent on the failing step",     "required": false }
+        ]
+      },
+      {
+        "name": "Webhook Send Error",
+        "description": "Fired when a destination webhook delivery fails after all retries are exhausted.",
+        "properties": [
+          { "name": "destination_type", "type": "string",  "description": "Destination type",                           "required": true },
+          { "name": "destination_name", "type": "string",  "description": "User-provided display name",                 "required": true },
+          { "name": "error_code",       "type": "string",  "description": "HTTP status code or error identifier",       "required": true },
+          { "name": "error_message",    "type": "string",  "description": "Description of the delivery failure",        "required": false },
+          { "name": "retry_count",      "type": "integer", "description": "Number of delivery attempts before giving up","required": false }
+        ]
+      }
+    ]
+  }
+}

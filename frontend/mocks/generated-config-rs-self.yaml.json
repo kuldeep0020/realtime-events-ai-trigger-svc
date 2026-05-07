@@ -1,0 +1,6 @@
+{
+  "persona": "rs-self",
+  "source": "preset:persona-configs/rs-self.yaml",
+  "config_yaml": "persona: rs-self\nrules:\n  - name: onboarding_errored\n    when:\n      any:\n        - window.has_event_name: \"Source Setup Error\"\n        - window.has_event_name: \"Destination Setup Error\"\n        - window.has_event_name: \"Webhook Send Error\"\n    fire:\n      action_template: rs_onboarding_stuck\n      destination: \"email:user\"\n      cooldown_seconds: 86400\n\n  - name: onboarding_stuck\n    when:\n      all:\n        - window.has_event_name: \"Source Created\"\n        - window.event_count_of_name: { name: \"Destination Created\", \"==\": 0 }\n        - window.idle_seconds: { \">=\": 15 }\n    fire:\n      action_template: rs_onboarding_stuck\n      destination: \"email:user\"\n      cooldown_seconds: 86400\n",
+  "description": "RudderStack self-serve onboarding — fires support emails when users get stuck on errors."
+}

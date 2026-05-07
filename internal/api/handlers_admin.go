@@ -7,16 +7,24 @@ import (
 	"time"
 )
 
-// handleAdminSeed is a 501 stub — actual seed re-runs live in WP-F's
-// internal/seed/ package which loads YAML and upserts canned rows.
-//
-// TODO(WP-F): wire to internal/seed/ once that lands.
-func (s *Server) handleAdminSeed(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusNotImplemented, map[string]any{
-		"error":  "admin seed not yet wired",
-		"status": "stub",
-		"todo":   "WP-F internal/seed/",
-	})
+// handleAdminSeed invokes the configured AdminSeed callback. Returns 501
+// when not wired so existing tests continue to pass.
+func (s *Server) handleAdminSeed(w http.ResponseWriter, r *http.Request) {
+	if s.adminSeed == nil {
+		writeJSON(w, http.StatusNotImplemented, map[string]any{
+			"error":  "admin seed not yet wired",
+			"status": "stub",
+			"todo":   "wire AdminSeed via api.Config",
+		})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+	defer cancel()
+	if err := s.adminSeed(ctx); err != nil {
+		writeError(w, http.StatusInternalServerError, "seed failed: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"status": "seeded"})
 }
 
 // handleAdminCanned returns rows from canned_responses filtered by query
