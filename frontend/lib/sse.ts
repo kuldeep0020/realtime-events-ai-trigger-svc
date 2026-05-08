@@ -93,6 +93,29 @@ interface BroadcasterEntry {
 
 const broadcasters = new Map<StreamName, BroadcasterEntry>();
 
+// Expose a debug inspector at window.__sse_debug so we can check broadcaster
+// health from the browser console (e.g., "is the EventSource for 'events'
+// stuck in CLOSED state?"). No-op in SSR.
+if (typeof window !== "undefined") {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (window as any).__sse_debug = () =>
+    Array.from(broadcasters.entries()).map(([stream, e]) => ({
+      stream,
+      readyState: e.source?.readyState ?? "no-source",
+      // 0=CONNECTING, 1=OPEN, 2=CLOSED
+      readyStateLabel:
+        e.source?.readyState === 0
+          ? "CONNECTING"
+          : e.source?.readyState === 1
+            ? "OPEN"
+            : e.source?.readyState === 2
+              ? "CLOSED"
+              : "no-source",
+      listeners: e.listeners.size,
+      opened: e.opened,
+    }));
+}
+
 function getOrCreate(stream: StreamName): BroadcasterEntry {
   let entry = broadcasters.get(stream);
   if (!entry) {
@@ -123,6 +146,18 @@ function fanOut(entry: BroadcasterEntry, msg: SSEMessage): void {
 }
 
 function connect(stream: StreamName, entry: BroadcasterEntry): void {
+  // Self-heal: if we still hold a reference to a previous EventSource that
+  // the browser silently closed (typically on Next.js client-side navigation
+  // or when the network drops below the HTTP/1.1 connection cap during
+  // dashboard ↔ onboarding round-trips), drop it and open a fresh one. Without
+  // this, the early-return below would short-circuit forever and the
+  // broadcaster's listeners would never receive another message — the
+  // symptom users see as "click Fire → 'Resetting…' stuck → refresh fixes."
+  if (entry.source !== null && entry.source.readyState === 2 /* CLOSED */) {
+    entry.source.close();
+    entry.source = null;
+    entry.opened = false;
+  }
   if (entry.source !== null || entry.mockTimer !== null) return;
 
   if (isMockMode) {
