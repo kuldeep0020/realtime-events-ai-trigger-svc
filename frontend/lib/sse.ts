@@ -10,8 +10,26 @@
  * per ~2 seconds using a synthetic timer, so the UI looks live without a
  * backend. The mock sequences match /mocks/events-*.json.
  *
- * Used by WP-H for the dashboard live columns. Exported from here so WP-H
- * only needs to import one hook.
+ * ──────────────────────────────────────────────────────────────────────────────
+ * Connection-budget design
+ * ──────────────────────────────────────────────────────────────────────────────
+ *
+ * Browsers cap HTTP/1.1 connections per origin at 6. Earlier the dashboard
+ * opened five separate EventSources (events, windows, triggers×3 from
+ * TriggerStream/OutcomeBanner/ROITile, mock_emails on the Emails tab),
+ * doubled in dev mode by React StrictMode + HMR. This pinned the connection
+ * pool, causing /api/demo/reset and /api/mock-emails fetches to queue
+ * indefinitely (4s+ to abort).
+ *
+ * This module fixes that by maintaining ONE EventSource per stream name
+ * across the whole tree, with a refcounted broadcaster. Components subscribe
+ * via the same useSSEStream hook; behind the scenes their callbacks get
+ * added to a shared listener set. When refcount drops to 0 (last subscriber
+ * unmounts), the EventSource closes.
+ *
+ * Net effect: max 4 simultaneous EventSources (events, windows, triggers,
+ * mock_emails — and only the ones currently subscribed), leaving plenty of
+ * connection slots for fetches.
  */
 
 import { useEffect, useRef, useCallback } from "react";
@@ -36,7 +54,7 @@ export interface SSEMessage {
   data: unknown;
 }
 
-export type SSEMessageHandler = (message: SSEMessage) => void;
+export type SSEMessageHandler = (msg: SSEMessage) => void;
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Mock replay sequences keyed by stream name
@@ -49,20 +67,156 @@ const MOCK_SEQUENCES: Partial<Record<StreamName, unknown[]>> = {
   mock_emails: [],
 };
 
+const NAMED_EVENT_NAMES: readonly string[] = [
+  "events",
+  "windows",
+  "triggers",
+  "mock_emails",
+  "window_pruned",
+  "reset",
+];
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Singleton broadcaster per stream
+// ──────────────────────────────────────────────────────────────────────────────
+
+interface BroadcasterEntry {
+  source: EventSource | null;
+  listeners: Set<SSEMessageHandler>;
+  /** Tracks who's interested in onOpen — invoked once on next establish. */
+  pendingOpenCallbacks: Set<() => void>;
+  /** Already opened? (latched true on first onopen; reset on close.) */
+  opened: boolean;
+  /** Mock-mode timer (when isMockMode === true). */
+  mockTimer: ReturnType<typeof setInterval> | null;
+}
+
+const broadcasters = new Map<StreamName, BroadcasterEntry>();
+
+function getOrCreate(stream: StreamName): BroadcasterEntry {
+  let entry = broadcasters.get(stream);
+  if (!entry) {
+    entry = {
+      source: null,
+      listeners: new Set(),
+      pendingOpenCallbacks: new Set(),
+      opened: false,
+      mockTimer: null,
+    };
+    broadcasters.set(stream, entry);
+  }
+  return entry;
+}
+
+function fanOut(entry: BroadcasterEntry, msg: SSEMessage): void {
+  // Snapshot listeners so handlers can subscribe/unsubscribe during fan-out
+  // without mutating the iteration set.
+  for (const cb of Array.from(entry.listeners)) {
+    try {
+      cb(msg);
+    } catch (err) {
+      // Don't let a single handler error kill the broadcaster.
+      // eslint-disable-next-line no-console
+      console.error("[sse] listener threw", err);
+    }
+  }
+}
+
+function connect(stream: StreamName, entry: BroadcasterEntry): void {
+  if (entry.source !== null || entry.mockTimer !== null) return;
+
+  if (isMockMode) {
+    const sequence = MOCK_SEQUENCES[stream] ?? [];
+    if (sequence.length === 0) {
+      // Even in mock mode, surface "opened" so consumers like EventFeed
+      // can flip from "connecting" to "live".
+      entry.opened = true;
+      entry.pendingOpenCallbacks.forEach((cb) => cb());
+      entry.pendingOpenCallbacks.clear();
+      return;
+    }
+    let idx = 0;
+    entry.opened = true;
+    entry.pendingOpenCallbacks.forEach((cb) => cb());
+    entry.pendingOpenCallbacks.clear();
+    entry.mockTimer = setInterval(() => {
+      if (idx >= sequence.length) {
+        if (entry.mockTimer) clearInterval(entry.mockTimer);
+        entry.mockTimer = null;
+        return;
+      }
+      fanOut(entry, { event: stream, data: sequence[idx] });
+      idx++;
+    }, 2000);
+    return;
+  }
+
+  // Live mode
+  const url = `${BASE}/api/streams/${stream}`;
+  const source = new EventSource(url);
+  entry.source = source;
+
+  source.onmessage = (ev: MessageEvent<string>) => {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(ev.data) as unknown;
+    } catch {
+      parsed = ev.data;
+    }
+    fanOut(entry, { id: ev.lastEventId, event: ev.type, data: parsed });
+  };
+
+  for (const name of NAMED_EVENT_NAMES) {
+    source.addEventListener(name, (ev) => {
+      const msgEv = ev as MessageEvent<string>;
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(msgEv.data) as unknown;
+      } catch {
+        parsed = msgEv.data;
+      }
+      fanOut(entry, { id: msgEv.lastEventId, event: name, data: parsed });
+    });
+  }
+
+  source.onopen = () => {
+    entry.opened = true;
+    entry.pendingOpenCallbacks.forEach((cb) => cb());
+    entry.pendingOpenCallbacks.clear();
+  };
+
+  source.onerror = () => {
+    // EventSource auto-reconnects on error; no explicit action needed.
+  };
+}
+
+function disconnect(entry: BroadcasterEntry): void {
+  if (entry.source) {
+    entry.source.close();
+    entry.source = null;
+  }
+  if (entry.mockTimer) {
+    clearInterval(entry.mockTimer);
+    entry.mockTimer = null;
+  }
+  entry.opened = false;
+  entry.pendingOpenCallbacks.clear();
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // Hook
 // ──────────────────────────────────────────────────────────────────────────────
 
 /**
- * useSSEStream — subscribes to a named stream and calls onMessage for each event.
+ * useSSEStream — subscribes to a named stream and calls onMessage for each
+ * event. Multiple components subscribing to the same stream share ONE
+ * underlying EventSource (refcounted across the tree). The connection is
+ * established on first subscriber and torn down when the last subscriber
+ * unmounts.
  *
- * The connection is torn down on component unmount or when stream/onMessage
- * reference changes. onMessage is wrapped in a stable ref to prevent infinite
- * re-subscription loops when the caller passes an inline function.
- *
- * onOpen, if provided, is called when the EventSource connection is established.
- * Use this to flip UI state from "connecting" to "connected" without waiting
- * for the first data event.
+ * onOpen, if provided, is called when the EventSource connection is
+ * established (or immediately if already open). Use this to flip UI state
+ * from "connecting" to "connected" without waiting for the first data event.
  */
 export function useSSEStream(
   stream: StreamName,
@@ -83,76 +237,28 @@ export function useSSEStream(
   useEffect(() => {
     if (!enabled) return;
 
-    if (isMockMode) {
-      // Replay mock events at ~2s intervals
-      const sequence = MOCK_SEQUENCES[stream] ?? [];
-      if (sequence.length === 0) return;
-      let idx = 0;
-      const timerId = setInterval(() => {
-        if (idx >= sequence.length) {
-          clearInterval(timerId);
-          return;
-        }
-        stableHandler({
-          event: stream,
-          data: sequence[idx],
-        });
-        idx++;
-      }, 2000);
-      return () => clearInterval(timerId);
+    const entry = getOrCreate(stream);
+    entry.listeners.add(stableHandler);
+
+    // Establish the connection if this is the first subscriber.
+    connect(stream, entry);
+
+    // If the connection is already open by the time we subscribe (other
+    // components opened it earlier), fire onOpen synchronously.
+    if (entry.opened) {
+      onOpenRef.current?.();
+    } else if (onOpenRef.current) {
+      // Otherwise queue it for the next onopen.
+      const cb = () => onOpenRef.current?.();
+      entry.pendingOpenCallbacks.add(cb);
     }
 
-    // Live mode: native EventSource
-    const url = `${BASE}/api/streams/${stream}`;
-    const source = new EventSource(url);
-
-    source.onmessage = (ev: MessageEvent<string>) => {
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(ev.data) as unknown;
-      } catch {
-        parsed = ev.data;
-      }
-      stableHandler({ id: ev.lastEventId, event: ev.type, data: parsed });
-    };
-
-    // Listen for named events the server emits (e.g., event: "trigger").
-    // "reset" is included so all columns receive the demo-reset signal.
-    const eventNames: string[] = [
-      "events",
-      "windows",
-      "triggers",
-      "mock_emails",
-      "window_pruned",
-      "reset",
-    ];
-    const namedListeners = eventNames.map((name) => {
-      const listener = (ev: MessageEvent<string>) => {
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(ev.data) as unknown;
-        } catch {
-          parsed = ev.data;
-        }
-        stableHandler({ id: ev.lastEventId, event: name, data: parsed });
-      };
-      source.addEventListener(name, listener);
-      return { name, listener };
-    });
-
-    source.onopen = () => {
-      onOpenRef.current?.();
-    };
-
-    source.onerror = () => {
-      // EventSource auto-reconnects on error; no explicit action needed.
-    };
-
     return () => {
-      namedListeners.forEach(({ name, listener }) =>
-        source.removeEventListener(name, listener)
-      );
-      source.close();
+      entry.listeners.delete(stableHandler);
+      // If we still have any subscribers, keep the connection alive.
+      if (entry.listeners.size === 0) {
+        disconnect(entry);
+      }
     };
   }, [stream, stableHandler, enabled]);
 }
