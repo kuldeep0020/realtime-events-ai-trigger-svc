@@ -116,6 +116,8 @@ const fireScriptResponseSchema = z.object({
   persona: z.string(),
   event_count: z.number(),
   status: z.string(),
+  count: z.number().optional(),
+  speed: z.number().optional(),
 });
 
 // ──────────────────────────────────────────────────────────────────────────────

@@ -151,6 +151,10 @@ export interface FireScriptResponse {
   persona: string;
   event_count: number;
   status: string;
+  /** Concurrent sessions actually fired (1-3); echoed by backend on success. */
+  count?: number;
+  /** Speed multiplier applied (0.5/1.0/2.0); echoed by backend on success. */
+  speed?: number;
 }
 
 export interface DemoResetResponse {

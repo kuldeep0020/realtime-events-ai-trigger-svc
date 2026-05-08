@@ -88,7 +88,44 @@ export function ConfigPreview({ data, persona, configYaml, onBack }: ConfigPrevi
   const [, startTransition] = useTransition();
 
   const yaml = configYaml ?? data.config_yaml;
-  const ruleCount = (yaml.match(/^\s{2,}- name:/gm) ?? []).length;
+  // Count rules robustly across YAML formatter variations:
+  //   - seed YAML uses 0-space indent for `rules:` items (`- fire:` at col 0)
+  //   - gopkg.in/yaml.v3 (re-marshalled) uses 4-space indent (`    - fire:`)
+  //   - both put a different key first per rule item (`name:` or `fire:`)
+  //
+  // Strategy: find the `rules:` line, then look at the FIRST `- ` list item
+  // after it to learn the rule-item indent. Subsequent list items at that
+  // exact indent are rules; deeper indents are nested (e.g., predicates
+  // inside `when.all`); a top-level key at column 0 ends the block.
+  function countRules(yaml: string): number {
+    const lines = yaml.split("\n");
+    let inRules = false;
+    let ruleIndent: number | null = null;
+    let count = 0;
+    for (const line of lines) {
+      if (/^rules:\s*$/.test(line)) {
+        inRules = true;
+        ruleIndent = null;
+        continue;
+      }
+      if (!inRules) continue;
+      // End block: a fresh top-level key at column 0.
+      if (/^[A-Za-z_][\w-]*:/.test(line) && line[0] !== " ") break;
+      // Skip blank lines.
+      const m = line.match(/^(\s*)-\s/);
+      if (!m) continue;
+      const indent = m[1].length;
+      if (ruleIndent === null) {
+        ruleIndent = indent;
+        count = 1;
+      } else if (indent === ruleIndent) {
+        count++;
+      }
+      // Items at deeper indent are nested predicates / suburbs lists; ignore.
+    }
+    return count;
+  }
+  const ruleCount = countRules(yaml);
 
   const handleActivate = () => {
     if (activating) return;
