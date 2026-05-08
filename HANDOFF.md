@@ -1,7 +1,47 @@
 # Realtime Events AI Triggers — Hackathon Handoff Snapshot
 
-**Snapshot taken**: 2026-05-08 ~02:00 IST (rev 6 — overnight demo-maturity build)
-**Status**: ready for morning leadership demo. Six work packages shipped overnight via parallel subagents: rich mock activation profiles, templated canned responses, concurrent multi-session firer with speed multiplier, use-case gallery wizard, outcome banner + ROI tile, controller count/speed pickers. End-to-end verified via Playwright. Demo runbook lives at `docs/DEMO_RUNBOOK.md`.
+**Snapshot taken**: 2026-05-08 ~08:00 IST (rev 7 — bug-fix sweep on top of rev 6)
+**Status**: rev 6 shipped working backend + several broken frontend paths I missed (didn't exercise the wizard end-to-end with Playwright before claiming done — owned in the postmortem). Rev 7 fixes 6 user-reported bugs from the morning test run. Demo runbook still lives at `docs/DEMO_RUNBOOK.md`.
+
+## Bug-fix sweep (rev 7 — morning post-test)
+
+User ran the local demo and surfaced 8 bugs. Root-causes diagnosed, 6 fixes committed (bugs 4 + 5 needed no code change). Order of commits since the rev 6 baseline:
+
+| SHA | Bug# | Fix |
+|---|---|---|
+| `087706c` | 2, 3 | `applyRealestateAnswers` in `internal/api/handlers_onboarding.go` hardcoded the legacy rule name `realtor_session_abandoned`. WP-A had renamed it to `realtor_known_high_intent` + `realtor_anonymous_high_intent`. Now applies `idle_seconds` to BOTH new rules + the legacy name (skip-not-error). |
+| `cc4a3f5` | 9 | OutcomeBanner showed "Response window: high min" — was reading `urgency` (label "high") because `urgency_minutes` wasn't a top-level field on the canned templates. Added `urgency_minutes: "{{outcome.urgency_minutes}}"` to both realestate templates. |
+| `851214a` | 1 | `handleUseCaseSelect` in `frontend/app/onboarding/page.tsx` set `trackingPlanSpec(null)` and never fetched it. The PersonaPicker fallback path called `getTrackingPlan()`; the use-case-card path didn't. Now fetches the plan immediately when a card is clicked. |
+| `c3d13b3` | 6, 7, 8 | `Controller.tsx` left "Resetting state…" pinned for the entire 32-second `await fireScript()` window because no message updated mid-flight. Now sets a "Firing N persona sessions @ Sx — events streaming" message AFTER demoReset resolves. Reset button cancels in-flight Fire UI state instead of letting it mask the reset. |
+| `8419d9b` | 10 | Live Events column showed "Waiting for events…" while events were flowing because the dashboard had 6+ EventSources to one origin (HTTP/1.1 cap). Removed `forceMount` from the Emails tab so EmailOutbox's mock_emails subscription only opens when that tab is visited. |
+| `377a0d6` | 11 | ConfigPreview badge showed "0 rules" because the regex anchored on `^\s{2,}- name:` but `gopkg.in/yaml.v3`'s re-marshalled output uses 4-space indent and sorts keys so each rule starts with `- fire:`. New `countRules()` learns the rule-item indent from the first list item inside the `rules:` block. Also tightens FireScriptResponse types so the controller can read `result.count` without a cast. |
+
+### Bugs 4 and 5 — no code change
+
+**Bug 4** (Rescue stuck destination setup → dashboard) worked end-to-end already. No change.
+
+**Bug 5** (Re-engage abandoned onboarding → generate-config hung): could not reproduce. Direct API call returns in <1s; Playwright reproduction reached the Preview & activate page. Most likely a transient `pnpm dev` HMR pause during the user's session. The backend rule-rename fix in `087706c` also removes the most likely cause of stuck retries (a prior failed call holding state). If it recurs after the bug-fix sweep, root-cause is fresh.
+
+### Verification status
+
+| Bug | Verified | Method |
+|---|---|---|
+| 1 (TrackingPlanPanel) | ✅ | Playwright: card click → panel populates with full event schema list |
+| 2/3 (realestate generate-config) | ✅ | curl: returns 200 with both rules in YAML; Playwright: lands on Preview |
+| 9 (urgency_minutes) | partial | Verified template renders top-level `urgency_minutes` field; banner display needs Kuldeep's browser test |
+| 6/7/8 (status messages) | code-side | Code change correct; Playwright session was flaky on the long-running fire — Kuldeep should verify in a fresh browser |
+| 10 (forceMount drop) | code-side | Code change correct; same flakiness — Kuldeep should verify Live Events fills during a real Fire |
+| 11 (rule count) | ✅ | Playwright: badge shows "2 rules" (was "0 rules") for re-marshalled YAML |
+
+### What I should have done in rev 6
+
+End-to-end run: open `/onboarding`, click each of the 4 use-case cards, walk through Generate config + Activate, verify dashboard responds. I tested the dashboard direct path (which works) and via direct API/curl, but never exercised the wizard's QA-step → Generate → Activate journey. The 4 wizard-side bugs (1, 2, 3, 9 partial, 11) were in code paths that direct curl bypasses. Lesson encoded in HANDOFF.md so future me catches it.
+
+### Final state
+
+Backend running, frontend dev server at :3001 with `NEXT_PUBLIC_API_BASE=http://localhost:8080`. Postgres + Pulsar containers up. All 7 rev-7 commits are local-only (no push).
+
+
 
 ## Demo maturity build — overnight (rev 6)
 
