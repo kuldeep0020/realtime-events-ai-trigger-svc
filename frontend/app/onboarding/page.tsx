@@ -11,7 +11,7 @@ import { BrandHeader } from "@/components/shared/BrandHeader";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { ChevronRight } from "lucide-react";
-import { generateConfig } from "@/lib/api-client";
+import { generateConfig, getTrackingPlan } from "@/lib/api-client";
 import type { Persona, TrackingPlanSpec, GenerateConfigResponse, WizardAnswers } from "@/types/api";
 import type { UseCase } from "@/lib/use-cases";
 
@@ -68,14 +68,23 @@ export default function OnboardingPage() {
   // ── Gallery handlers ──────────────────────────────────────────────────────
 
   /**
-   * User clicked a use-case card. Pre-fill persona from the card and jump
-   * directly to QAStep — PersonaPicker is bypassed.
+   * User clicked a use-case card. Pre-fill persona from the card, fetch the
+   * tracking plan spec for the right-hand reference panel (so the audience
+   * sees the events the rule listens for), and jump directly to QAStep.
+   *
+   * Tracking plan fetch is fire-and-forget — failure leaves the panel in its
+   * empty state ("Select a persona...") rather than blocking the wizard.
    */
   const handleUseCaseSelect = (useCase: UseCase) => {
     setPersona(useCase.persona);
-    // Clear any previously loaded tracking plan spec — QAStep drives off persona only
-    setTrackingPlanSpec(null);
+    setTrackingPlanSpec(null); // clear stale spec while fetching
     setStep(STEP_QA);
+    void getTrackingPlan(useCase.persona)
+      .then((plan) => setTrackingPlanSpec(plan.spec))
+      .catch((err) => {
+        // Non-fatal: panel stays empty but wizard continues.
+        console.warn("[onboarding] tracking plan fetch failed:", err);
+      });
   };
 
   /** User clicked "Or pick by persona →" — fall through to PersonaPicker. */
