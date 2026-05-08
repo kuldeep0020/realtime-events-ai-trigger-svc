@@ -66,14 +66,20 @@ function SessionCard({ entry, triggered }: SessionCardProps) {
           : {}
       }
       transition={{ duration: 0.8 }}
-      className={`rounded-lg border px-3 py-2.5 text-xs ${
+      className={`rounded-lg border px-3 py-2.5 text-xs transition-opacity ${
         triggered
-          ? "border-emerald-700 bg-emerald-950/30"
+          ? // Actioned: muted, dimmed, but still legible. The session is
+            // still alive in memory (windows live 15 min) and the cooldown
+            // is recorded; the visual treatment communicates "we already
+            // pinged the realtor about this visitor — they're handled."
+            "border-emerald-800/70 bg-emerald-950/15 opacity-65"
           : "border-slate-800 bg-slate-900/60"
       }`}
     >
       <div className="flex items-center gap-2 mb-1.5">
-        <span className="font-mono text-slate-200 font-medium">…{anonSuffix}</span>
+        <span className={`font-mono font-medium ${triggered ? "text-slate-400" : "text-slate-200"}`}>
+          …{anonSuffix}
+        </span>
         {data.has_error_event && (
           <Badge className="bg-red-900/60 text-red-300 border-red-800 text-[10px] px-1.5 py-0">
             error
@@ -81,10 +87,10 @@ function SessionCard({ entry, triggered }: SessionCardProps) {
         )}
         {triggered && (
           <Badge
-            className="ml-auto bg-emerald-900/60 text-emerald-300 border-emerald-700 text-[10px] px-1.5 py-0"
-            aria-label="trigger fired"
+            className="ml-auto bg-emerald-700/80 text-emerald-50 border-emerald-600 text-[10px] px-2 py-0 font-semibold tracking-wide"
+            aria-label="actioned: trigger already fired"
           >
-            🎯 trigger fired
+            ✓ actioned
           </Badge>
         )}
       </div>
@@ -198,9 +204,14 @@ export function WindowInspector({ triggeredIds = new Set() }: WindowInspectorPro
 
   useSSEStream("windows", onMessage);
 
-  const entries = Array.from(windows.values()).sort(
-    (a, b) => b.updatedAt - a.updatedAt
-  );
+  // Sort actioned sessions to the bottom so live (awaiting-trigger) cards
+  // dominate the column. Within each group, order by recency.
+  const entries = Array.from(windows.values()).sort((a, b) => {
+    const aActioned = triggeredIds.has(a.data.anonymous_id) ? 1 : 0;
+    const bActioned = triggeredIds.has(b.data.anonymous_id) ? 1 : 0;
+    if (aActioned !== bActioned) return aActioned - bActioned;
+    return b.updatedAt - a.updatedAt;
+  });
 
   return (
     <section className="flex flex-col h-full" aria-label="Active Sessions">
