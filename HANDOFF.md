@@ -1,7 +1,49 @@
 # Realtime Events AI Triggers — Hackathon Handoff Snapshot
 
-**Snapshot taken**: 2026-05-08 ~08:00 IST (rev 7 — bug-fix sweep on top of rev 6)
-**Status**: rev 6 shipped working backend + several broken frontend paths I missed (didn't exercise the wizard end-to-end with Playwright before claiming done — owned in the postmortem). Rev 7 fixes 6 user-reported bugs from the morning test run. Demo runbook still lives at `docs/DEMO_RUNBOOK.md`.
+**Snapshot taken**: 2026-05-08 ~09:30 IST (rev 8 — connection-cap fix + actioned-session re-style)
+**Status**: 6 wizard-side bugs fixed in rev 7. User then ran the dashboard fire-flow and surfaced 2 deeper bugs (controller stuck on "Resetting…" + empty Emails tab) plus a UX request (re-style fired sessions). Rev 8 root-cause-fixes both with one architectural change (shared SSE broadcaster) plus the requested re-style. End-to-end verified through Playwright. Demo runbook still lives at `docs/DEMO_RUNBOOK.md`.
+
+## Rev 8 — connection-cap fix + actioned-session re-style
+
+| SHA | What |
+|---|---|
+| `8db1e98` | `frontend/lib/sse.ts` — shared SSE broadcaster. Multiple components subscribing to the same stream now share ONE EventSource (refcounted). Reduces dashboard's open EventSources from 5 to 3, freeing connection slots so /api/demo/reset and /api/mock-emails fetches don't queue indefinitely. |
+| `bda86cb` | `frontend/components/dashboard/WindowInspector.tsx` — actioned sessions get `opacity-65` muted styling, prominent `✓ actioned` badge (was `🎯 trigger fired`), sorted to bottom of the column. |
+
+### What was actually broken in rev 7
+
+Rev 7's "drop forceMount on Emails tab" was a partial fix — it removed ONE EventSource from the budget but the dashboard still opened 5 simultaneously (events + windows + triggers×3 from TriggerStream/OutcomeBanner/ROITile). Doubled to ~10 by React StrictMode + HMR in dev. Browsers cap HTTP/1.1 at 6 connections per origin.
+
+Empirically confirmed in Chrome:
+- `fetch('/api/demo/reset')` from `/onboarding` (no SSE): **17ms**
+- Same fetch from `/dashboard` (5 SSE): **4002ms abort**
+
+That's why the user's first Fire click sat on "Resetting…" forever — `await demoReset()` never resolved. Navigating to /onboarding and back closed all SSE connections, freeing slots, and the next mount worked. The Emails tab was empty for the same reason — `listMockEmails()` queued and aborted.
+
+The shared broadcaster collapses the 3 triggers subscribers into 1 EventSource (TriggerStream, OutcomeBanner, ROITile all multiplex through the same connection). Dashboard now opens **3** simultaneous EventSources max (events, windows, triggers). When the user switches to Emails, the dashboard EventSources unmount, refcount drops to 0, connections close, EmailOutbox's mock_emails subscription opens cleanly.
+
+### Verification (Playwright + 4-second action timeouts)
+
+| Bug / Task | Result |
+|---|---|
+| Bug A — Fire stuck on "Resetting…" | ✅ Fetch returns in 7ms; status transitions through "Firing 2 realestate sessions @ 1x — events streaming" → "✓ Fired 16 events across 2 sessions" |
+| Bug B — Emails tab empty | ✅ After rs-self fire, Emails tab shows "Mock Emails: 4" with all four emails listed (alex@acme.io, jamie@beacon.dev) |
+| Live Events column | ✅ Populates with 8 events within 3s of Fire click |
+| Active Sessions | ✅ Shows 2 cards with rolling event/page/last-seen counts |
+| Triggers Fired | ✅ Populates after the 8s idle threshold |
+| Task C — actioned styling | ✅ Both session cards show `✓ actioned` badge with muted styling |
+
+### Lesson learned (encoded for future me)
+
+Rev 6 review-cycle reviewer flagged the EventSource-cap issue as IMPORTANT. I pushed back citing "spec §5.9 v1 accepted duplicate connections" + "regression risk on demo day." That was the wrong trade. The cap was actually biting — I just couldn't reproduce it because my Playwright tests opened a fresh browser context each time, dodging the realistic case where the user's tab has accumulated cached EventSources across page lifecycles.
+
+Reviewers' concerns about resource budgets deserve more weight when they're cheap to fix (this was 100 lines and zero behavioral risk). Recorded in HANDOFF.md.
+
+### Final state
+
+Backend running. Frontend dev server at :3001 with `NEXT_PUBLIC_API_BASE=http://localhost:8080`. 21 commits since the rev-6 baseline (`07c36fb`). All local; no pushes per your instruction.
+
+
 
 ## Bug-fix sweep (rev 7 — morning post-test)
 
