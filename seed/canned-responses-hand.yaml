@@ -22,6 +22,7 @@ canned_llm:
       best_cta: "Call {{trait.first_name}} on {{trait.email}} within {{outcome.urgency_minutes}} minutes. Lead with {{window.last_listing_id}} — matches every filter criterion."
       estimated_deal_value: "{{outcome.estimated_deal_value}}"
       urgency: high
+      urgency_minutes: "{{outcome.urgency_minutes}}"
       assigned_realtor:
         name: "{{realtor.name}}"
         phone: "{{realtor.phone}}"
@@ -42,10 +43,12 @@ canned_llm:
         - "Spent {{window.idle_seconds}}s idling on the detail page"
         - "No identify call yet — no name, no email, no phone"
       best_cta: "{{outcome.recommended_action}}. If they engage, you'll capture an email within ~60s; reassign to {{realtor.name}}."
+      recommended_action: "{{outcome.recommended_action}}"
       recommended_in_app_banner:
         headline: "Want a tour of {{window.last_listing_id}}? Tap to book in 30s — no signup required."
         cta: "Book a tour →"
       urgency: medium
+      urgency_minutes: "{{outcome.urgency_minutes}}"
       assigned_realtor_on_standby:
         name: "{{realtor.name}}"
         phone: "{{realtor.phone}}"
