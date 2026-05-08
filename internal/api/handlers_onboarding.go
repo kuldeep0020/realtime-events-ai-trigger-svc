@@ -216,11 +216,28 @@ func applyRealestateAnswers(doc map[string]any, answers map[string]any) error {
 	}
 
 	// --- idle_seconds ---
+	// Apply to BOTH split rules introduced by WP-A. The legacy single rule
+	// `realtor_session_abandoned` was split into `realtor_known_high_intent`
+	// and `realtor_anonymous_high_intent`; the wizard slider drives both so
+	// known-vs-anonymous flows stay in sync. Missing rules are tolerated
+	// (skip-not-error) so the wizard survives future config refactors.
 	if rawIdle, ok := answers["idle_seconds"]; ok {
 		idleSec := toFloat64(rawIdle)
 		if idleSec > 0 {
-			if err := setRuleIdleSeconds(doc, "realtor_session_abandoned", idleSec); err != nil {
-				return fmt.Errorf("set idle_seconds on realtor_session_abandoned: %w", err)
+			realestateRuleNames := []string{
+				"realtor_known_high_intent",
+				"realtor_anonymous_high_intent",
+				// Legacy name kept for backwards-compat with pre-WP-A seeds.
+				"realtor_session_abandoned",
+			}
+			anyApplied := false
+			for _, name := range realestateRuleNames {
+				if err := setRuleIdleSeconds(doc, name, idleSec); err == nil {
+					anyApplied = true
+				}
+			}
+			if !anyApplied {
+				return fmt.Errorf("set idle_seconds: no realestate rule found in config (expected one of: %v)", realestateRuleNames)
 			}
 		}
 	}
