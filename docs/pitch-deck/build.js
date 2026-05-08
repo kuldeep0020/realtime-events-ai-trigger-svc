@@ -166,14 +166,14 @@ async function build() {
       x: 0.6, y: 0.4, w: 6, h: 0.35,
       fontSize: 11, fontFace: "Arial", color: C.brandSoft, bold: true, charSpacing: 4, margin: 0,
     });
-    s.addText("Customers can stream events. They can't act on them in the moment.", {
+    s.addText("Customers stream events. They can't reason over the last few minutes of them.", {
       x: 0.6, y: 0.85, w: 12.2, h: 1.1,
-      fontSize: 30, fontFace: "Arial", color: C.text, bold: true, margin: 0,
+      fontSize: 28, fontFace: "Arial", color: C.text, bold: true, margin: 0,
     });
     s.addText(
-      "Event pipelines and warehouse audiences both exist — but the action layer in between is hand-wired with cron jobs, BigQuery dashboards, and Slack scripts that age fast.",
+      "Real-time pipelines deliver events. Warehouse audiences segment customers over weeks. There's nothing in between that holds short-term memory of a session, watches for live patterns, and acts in seconds — so teams stitch it together with brittle scripts and miss the moment.",
       {
-        x: 0.6, y: 2.15, w: 12.2, h: 0.7,
+        x: 0.6, y: 2.05, w: 12.2, h: 0.85,
         fontSize: 14, fontFace: "Arial", color: C.textMuted, margin: 0,
       }
     );
@@ -264,77 +264,96 @@ async function build() {
       x: 0.6, y: 0.4, w: 6, h: 0.35,
       fontSize: 11, fontFace: "Arial", color: C.brandSoft, bold: true, charSpacing: 4, margin: 0,
     });
-    s.addText("Four moments worth catching. One engine catches them all.", {
+    s.addText("Six moments worth catching. One engine catches them all.", {
       x: 0.6, y: 0.85, w: 12.2, h: 0.8,
       fontSize: 30, fontFace: "Arial", color: C.text, bold: true, margin: 0,
     });
 
-    // 2x2 grid — titles trimmed so all wrap to similar lengths
+    // 3×2 grid (6 cards). No invented %ages — capability claims only.
+    const cardW = 4.05;
+    const cardH = 2.45;
+    const gapX = 0.10;
+    const startX = 0.55;
+    const row1Y = 1.95;
+    const row2Y = 4.50;
     const cards = [
       {
-        x: 0.6, y: 1.95,
-        icon: ICONS.secret,
-        accent: C.accentRose,
-        title: "Win back anonymous high-intent visitors",
-        body: "Visitor narrows filters, opens 3 listings, idles. We trigger an in-app capture banner + ping a standby agent on Slack — before they leave.",
-        metric: "+38% capture rate",
+        col: 0, row: 0,
+        icon: ICONS.secret, accent: C.accentRose,
+        title: "Capture anonymous high-intent",
+        body: "Visitor narrows filters, opens 3 listings, idles. Fire an in-app banner offering a tour or chat — before they leave the site, while they're still on it.",
+        capability: "In-app capture moment",
         pain: "Marketing pain",
       },
       {
-        x: 6.95, y: 1.95,
-        icon: ICONS.phone,
-        accent: C.accentAmber,
-        title: "Alert your team to known engagement",
-        body: "Logged-in customer revisits their target suburb. Slack to the right realtor with full context: name, income tier, propensity, the listing they dwelled on.",
-        metric: "6s response time",
+        col: 1, row: 0,
+        icon: ICONS.phone, accent: C.accentAmber,
+        title: "Alert sales / CS on known engagement",
+        body: "Logged-in customer revisits pricing. Slack the right account owner with full context: name, ARR, prior interactions, the page they're dwelling on.",
+        capability: "Real-time human handoff",
         pain: "Customer Success pain",
       },
       {
-        x: 0.6, y: 4.5,
-        icon: ICONS.wrench,
-        accent: C.accentTeal,
+        col: 2, row: 0,
+        icon: ICONS.wrench, accent: C.accentTeal,
         title: "Rescue stuck onboarding errors",
-        body: "Setup error fires → personalized 3-step fix email referencing the exact error code, the destination type, and the customer's stack.",
-        metric: "+71% recovery rate",
+        body: "Setup error fires. We send a personalized fix email referencing the exact error code, the destination type, and the customer's stack — not a generic FAQ.",
+        capability: "Personalized per error",
         pain: "Onboarding pain",
       },
       {
-        x: 6.95, y: 4.5,
-        icon: ICONS.inbox,
-        accent: C.accentTeal,
+        col: 0, row: 1,
+        icon: ICONS.inbox, accent: C.accentTeal,
         title: "Re-engage stalled multi-step flows",
         body: "Customer created a source but never connected a destination. After idle, an email referencing their progress and tech stack — not a generic nudge.",
-        metric: "+52% completion lift",
+        capability: "Mid-funnel context-aware",
         pain: "Onboarding pain",
+      },
+      {
+        col: 1, row: 1,
+        icon: ICONS.nodes, accent: C.brand,
+        title: "Synthetic events from event patterns",
+        body: "Emit a new derived event when a pattern matches — e.g., \"high_intent_session\" when 3 listings + a filter + 8s idle. Feeds back into the same SDK / warehouse.",
+        capability: "Custom hooks on patterns",
+        pain: "Platform extensibility",
+      },
+      {
+        col: 2, row: 1,
+        icon: ICONS.dot, accent: C.accentBlue,
+        title: "Temporal context API",
+        body: "Ask \"what did this user do in the last 10 minutes?\" — short-term memory exposed as a query, so agents and apps can reason over live behavior, not yesterday's batch.",
+        capability: "Live session lookup",
+        pain: "Agent / app context",
       },
     ];
     for (const c of cards) {
+      const x = startX + c.col * (cardW + gapX);
+      const y = c.row === 0 ? row1Y : row2Y;
       s.addShape(pres.shapes.RECTANGLE, {
-        x: c.x, y: c.y, w: 5.75, h: 2.4,
+        x, y, w: cardW, h: cardH,
         fill: { color: C.surface }, line: { color: C.border, width: 1 },
         shadow: card_shadow(),
       });
-      // Left accent bar
       s.addShape(pres.shapes.RECTANGLE, {
-        x: c.x, y: c.y, w: 0.07, h: 2.4, fill: { color: c.accent }, line: { color: c.accent },
+        x, y, w: 0.07, h: cardH, fill: { color: c.accent }, line: { color: c.accent },
       });
-      s.addImage({ data: c.icon, x: c.x + 0.3, y: c.y + 0.3, w: 0.5, h: 0.5 });
+      s.addImage({ data: c.icon, x: x + 0.25, y: y + 0.25, w: 0.42, h: 0.42 });
       s.addText(c.title, {
-        x: c.x + 1.0, y: c.y + 0.3, w: 4.6, h: 0.55,
-        fontSize: 16, fontFace: "Arial", color: C.text, bold: true, margin: 0, valign: "middle",
+        x: x + 0.85, y: y + 0.18, w: cardW - 0.95, h: 0.6,
+        fontSize: 14, fontFace: "Arial", color: C.text, bold: true, margin: 0, valign: "middle",
       });
       s.addText(c.body, {
-        x: c.x + 0.3, y: c.y + 0.95, w: 5.2, h: 1.0,
-        fontSize: 12, fontFace: "Arial", color: C.textMuted, margin: 0,
+        x: x + 0.25, y: y + 0.85, w: cardW - 0.4, h: 1.15,
+        fontSize: 11, fontFace: "Arial", color: C.textMuted, margin: 0,
       });
-      // Bottom row: metric pill (left) + pain mapping (right) — both with arrow
-      s.addText(c.metric, {
-        x: c.x + 0.3, y: c.y + 1.95, w: 3.0, h: 0.32,
-        fontSize: 12, fontFace: "Arial", color: c.accent, bold: true, margin: 0,
+      // Bottom row: capability (left) + pain mapping (right)
+      s.addText(c.capability, {
+        x: x + 0.25, y: y + 2.05, w: cardW * 0.55, h: 0.3,
+        fontSize: 11, fontFace: "Arial", color: c.accent, bold: true, margin: 0,
       });
       s.addText("→ " + c.pain, {
-        x: c.x + 3.3, y: c.y + 1.95, w: 2.3, h: 0.32,
-        fontSize: 11, fontFace: "Arial", color: C.textMuted, italic: true, align: "right", margin: 0,
+        x: x + cardW * 0.55 + 0.15, y: y + 2.05, w: cardW * 0.40 - 0.2, h: 0.3,
+        fontSize: 10, fontFace: "Arial", color: C.textMuted, italic: true, align: "right", margin: 0,
       });
     }
 
