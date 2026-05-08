@@ -132,11 +132,21 @@ function DashboardContent() {
           </div>
         </TabsContent>
 
-        {/* Email outbox tab */}
+        {/* Email outbox tab.
+         *
+         * forceMount intentionally OMITTED on this tab to free an EventSource
+         * slot. Browsers cap HTTP/1.1 connections per origin at 6; with the
+         * Dashboard tab's 5 streams (events, windows, triggers×3 from
+         * TriggerStream/OutcomeBanner/ROITile), keeping EmailOutbox mounted
+         * would push us to 6 — and EventFeed's connection sometimes ends up
+         * queued behind the others, leaving Live Events stuck on
+         * "Waiting for events…" while the script is firing. EmailOutbox
+         * mounts only when the Emails tab is selected; SSE-driven email
+         * notifications since last visit are repopulated from the
+         * /api/mock-emails GET on mount. */}
         <TabsContent
           value="emails"
-          className="flex-1 overflow-hidden m-0 data-[state=inactive]:hidden"
-          forceMount
+          className="flex-1 overflow-hidden m-0"
         >
           <div className="h-full max-w-2xl mx-auto">
             <EmailOutbox />
