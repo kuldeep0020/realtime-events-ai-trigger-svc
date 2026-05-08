@@ -111,14 +111,23 @@ export function Controller({ compact = false, onPersonaChange }: ControllerProps
         console.warn("auto-reset failed; proceeding with fire", err);
       }
 
+      // Update the status message AFTER reset completes so the user sees the
+      // transition from "Resetting…" → "Firing…" rather than a 32s freeze on
+      // "Resetting state…" while the script actually plays out. The fireScript
+      // promise resolves only after all events have been sent (~32s at 1x for
+      // realestate), so without this the UI looks dead.
+      const sessionLabel = sessionCount === 1 ? "session" : "sessions";
+      setStatusMessage(
+        `Firing ${sessionCount} ${persona} ${sessionLabel} @ ${speed}x — events streaming, trigger fires after ~8s idle`
+      );
+
       startProgressAnimation(persona, speed);
 
       try {
-        // Pass count + speed alongside persona. FireScriptRequest currently
-        // FireScriptRequest now declares count + speed (types/api.ts);
-        // backend handler validates count ∈ {1,2,3}, speed ∈ {0.5,1.0,2.0}.
         const result = await fireScript({ persona, count: sessionCount, speed });
-        setStatusMessage(`Fired ${result.event_count} events — ${result.status}`);
+        setStatusMessage(
+          `✓ Fired ${result.event_count} events across ${result.count ?? sessionCount} ${sessionLabel} — watch the Triggers Fired column`
+        );
       } catch (err) {
         setStatusMessage(`Error: ${err instanceof Error ? err.message : "unknown"}`);
       } finally {
@@ -132,6 +141,13 @@ export function Controller({ compact = false, onPersonaChange }: ControllerProps
 
   const handleReset = useCallback(async () => {
     setResetDialogOpen(false);
+    // Cancel any in-flight Fire UI state so the reset isn't masked by a stale
+    // "Resetting state…" / progress bar from a previous Fire click. The
+    // backend fire-script continues asynchronously but the user sees the reset
+    // status immediately.
+    setFiring(null);
+    setProgress(0);
+    setStatusMessage("Resetting…");
     try {
       await demoReset();
       setStatusMessage("Demo reset — events, triggers, and cooldowns cleared");
